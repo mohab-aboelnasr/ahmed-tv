@@ -73,9 +73,9 @@
   };
   $('disconnect').onclick = () => { ls.del('db'); showConnect(); };
 
-  async function copy(t) {
+  async function copy(t, node) {
     try { await navigator.clipboard.writeText(t); toast('اتنسخ'); }
-    catch (e) { const r = document.createRange(); r.selectNodeContents($('c-snippet')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('اتحدد، انسخه من القائمة'); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents(node || $('c-snippet')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('اتحدد، انسخه من القائمة'); }
   }
 
   // ---------- ui helpers
@@ -225,7 +225,8 @@
   $('l-save').onclick = () => saveSettings({ auto: $('l-auto').checked, force: $('l-force').value, hijriShift: parseInt($('l-shift').value, 10) || 0, favName: $('l-fav').value.trim() }).then(renderFavs);
 
   // ---------- account
-  function renderAccount() { const a = doc.account || {}; $('a-server').value = a.server || ''; $('a-user').value = a.username || ''; $('a-pass').value = a.password || ''; }
+  function renderAccount() { const a = doc.account || {}; $('a-server').value = a.server || ''; $('a-user').value = a.username || ''; $('a-pass').value = a.password || ''; $('a-snippet').textContent = snippet(DB, KEY, ANON); }
+  $('a-copy').onclick = () => copy($('a-snippet').textContent, $('a-snippet'));
   $('a-save').onclick = async () => {
     const a = { server: $('a-server').value.trim(), username: $('a-user').value.trim(), password: $('a-pass').value };
     if (!a.server || !a.username || !a.password) { toast('اكتب السيرفر واسم المستخدم وكلمة السر', true); return; }
