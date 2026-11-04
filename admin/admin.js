@@ -44,7 +44,7 @@
   const getCatalog = () => (isSupa() ? rpc('tv_get_part', { k: KEY, p: 'catalog' }) : req('GET', 'catalog/' + KEY));
 
   function genKey() {
-    const a = new Uint8Array(18); crypto.getRandomValues(a);
+    const a = new Uint8Array(28); crypto.getRandomValues(a);
     return Array.from(a, (b) => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
   }
   function snippet(db, key, anon) {
