@@ -1,0 +1,5 @@
+/app/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: no-cache
+/admin/*
+  Cache-Control: no-cache

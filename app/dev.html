@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Ahmed TV (تجربة على الكمبيوتر)</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app"></div>
+<script>
+  // Preview the TV app in a desktop browser (1920x1080; zoom out with Ctrl -).
+  // Default: demo data.  Real data: dev.html?db=<database url>&key=<device key>
+  // Keys: arrows, Enter = OK, Backspace = back, PageUp/PageDown = CH+/CH-, digits, I = info.
+  (function () {
+    var q = {};
+    location.search.replace(/^\?/, '').split('&').forEach(function (p) { var kv = p.split('='); if (kv[0]) q[kv[0]] = decodeURIComponent(kv[1] || ''); });
+    window.AHMED_TV = { db: q.db || '', key: q.key || '', mock: !q.db, shellVersion: 'dev' };
+  })();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

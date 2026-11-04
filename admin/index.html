@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1014">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ahmed TV">
+<title>Ahmed TV · التحكم</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark">A</span><b>Ahmed <i>TV</i></b><span class="sep">التحكم</span></div>
+  <span class="sync" id="sync" data-state="idle">…</span>
+</header>
+
+<!-- connect -->
+<main id="connect" hidden>
+  <section class="card">
+    <h2>وصّل لوحة التحكم</h2>
+    <p>المرة الأولى بس. حط رابط قاعدة بيانات Firebase ومفتاح التلفزيون، وهيتحفظوا على الموبايل ده.</p>
+    <label for="c-db">رابط قاعدة البيانات</label>
+    <input id="c-db" type="url" dir="ltr" placeholder="https://xxxx.supabase.co">
+    <label for="c-anon">مفتاح Supabase (anon / publishable)</label>
+    <input id="c-anon" type="text" dir="ltr" autocomplete="off" spellcheck="false" placeholder="eyJhbGciOi… أو sb_publishable_…">
+    <label for="c-key">مفتاح التلفزيون</label>
+    <div class="inline"><input id="c-key" type="text" dir="ltr" autocomplete="off" spellcheck="false"><button class="btn ghost" id="c-gen" type="button">مفتاح جديد</button></div>
+    <p class="hint">المفتاح ده زي كلمة السر: أي حد معاه المفتاح والرابط يقدر يتحكم في التلفزيون. متبعتوش لحد.</p>
+    <button class="btn" id="c-save" type="button">وصّل</button>
+    <p class="err" id="c-err" hidden></p>
+  </section>
+  <section class="card">
+    <h2>إعدادات التلفزيون</h2>
+    <p>انسخ الكود ده وحطه في ملف <code>tizen-shell/settings.js</code> قبل ما تركّب التطبيق على التلفزيون.</p>
+    <pre id="c-snippet" dir="ltr"></pre>
+    <button class="btn ghost" id="c-copy" type="button">انسخ</button>
+  </section>
+</main>
+
+<!-- app -->
+<main id="main" hidden>
+  <nav class="tabs" id="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="home">الرئيسية</button>
+    <button type="button" role="tab" data-tab="msgs">الرسائل</button>
+    <button type="button" role="tab" data-tab="bdays">أعياد الميلاد</button>
+    <button type="button" role="tab" data-tab="chs">القنوات</button>
+    <button type="button" role="tab" data-tab="look">الشكل</button>
+    <button type="button" role="tab" data-tab="acct">الاشتراك</button>
+  </nav>
+
+  <!-- home -->
+  <div class="tab" data-tab="home">
+    <section class="card status" id="st-card">
+      <h2>حالة التلفزيون</h2>
+      <div class="kv" id="st"></div>
+      <button class="btn ghost small" id="st-refresh" type="button">تحديث</button>
+    </section>
+    <section class="card">
+      <h2>رسالة عاجلة</h2>
+      <p>بتظهر فوق أي حاجة بيتفرجوا عليها لحد ما يدوسوا OK.</p>
+      <label for="u-text">الرسالة</label>
+      <textarea id="u-text" rows="3" placeholder="ماما وبابا، ماتش الأهلي الساعة ٩ على قناة رقم ٦"></textarea>
+      <button class="btn" id="u-send" type="button">ابعت دلوقتي</button>
+    </section>
+    <section class="card">
+      <h2>جملة الترحيب</h2>
+      <p>بتظهر كبيرة في الأيام العادية.</p>
+      <label for="w-title">العنوان</label>
+      <input id="w-title" type="text" placeholder="Welcome Ahmed Gamal">
+      <label for="w-sub">السطر الصغير</label>
+      <input id="w-sub" type="text" placeholder="سيبه فاضي عشان يتغير مع الوقت">
+      <p class="hint">لو السطر الصغير فاضي، بيتغير لوحده: صباح الخير، نهاركم سعيد، مساء الخير، تصبحوا على خير.</p>
+      <button class="btn" id="w-save" type="button">احفظ</button>
+    </section>
+  </div>
+
+  <!-- messages -->
+  <div class="tab" data-tab="msgs">
+    <section class="card">
+      <h2>ابعت رسالة</h2>
+      <p>اختار اليوم واكتب الرسالة. أول ما يفتحوا التطبيق في اليوم ده هتظهر قدامهم، وبعدها تفضل في الرئيسية لآخر اليوم.</p>
+      <label for="m-date">اليوم</label>
+      <input id="m-date" type="date">
+      <label for="m-text">الرسالة</label>
+      <textarea id="m-text" rows="3" placeholder="مهاب بيحبكم جدًا وبيدعيلكم"></textarea>
+      <button class="btn" id="m-save" type="button">احفظ الرسالة</button>
+    </section>
+    <section class="card">
+      <h2>رسايلك</h2>
+      <div id="m-list" class="list"></div>
+    </section>
+  </div>
+
+  <!-- birthdays -->
+  <div class="tab" data-tab="bdays">
+    <section class="card">
+      <h2>أعياد الميلاد والمناسبات</h2>
+      <p>في اليوم ده التلفزيون كله يقلب احتفال باسم الشخص، كل سنة لوحده. ضيف أي حد، أو يوم جوازهم.</p>
+      <div id="b-list" class="list"></div>
+      <div class="row2">
+        <button class="btn ghost" id="b-add" type="button">+ ضيف شخص</button>
+        <button class="btn" id="b-save" type="button">احفظ</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- channels -->
+  <div class="tab" data-tab="chs">
+    <section class="card">
+      <h2 id="f-title">قائمة أحمد جمال</h2>
+      <p>الترتيب هنا هو رقم القناة على الريموت. التغييرات بتتحفظ على طول.</p>
+      <div id="f-list" class="list"></div>
+    </section>
+    <section class="card">
+      <h2>ضيف قنوات</h2>
+      <p id="cat-note">القائمة دي التلفزيون بيبعتها بعد ما يدخل على الاشتراك.</p>
+      <div class="row2">
+        <select id="cat-filter" aria-label="القسم"><option value="">كل الأقسام</option></select>
+        <input id="cat-q" type="search" placeholder="دوّر باسم القناة" aria-label="دوّر">
+      </div>
+      <div id="cat-list" class="list"></div>
+    </section>
+  </div>
+
+  <!-- look -->
+  <div class="tab" data-tab="look">
+    <section class="card">
+      <h2>ألوان الأيام العادية</h2>
+      <div class="swatches" id="pal">
+        <button type="button" data-k="gold" style="--c1:#d9b26a;--c2:#12131b">ذهبي</button>
+        <button type="button" data-k="ruby" style="--c1:#e5484d;--c2:#1a0c0e">أحمر</button>
+        <button type="button" data-k="emerald" style="--c1:#34c79a;--c2:#0b1d17">زمردي</button>
+        <button type="button" data-k="sapphire" style="--c1:#6ea8ff;--c2:#0c1328">أزرق</button>
+      </div>
+    </section>
+    <section class="card">
+      <label class="toggle" for="l-auto"><span>المناسبات الأوتوماتيك<small>الجمعة، رمضان، الأعياد، وأعياد الميلاد</small></span><input id="l-auto" type="checkbox"></label>
+      <label for="l-force">ثبّت شكل معيّن</label>
+      <select id="l-force">
+        <option value="auto">أوتوماتيك حسب اليوم</option>
+        <option value="normal">عادي</option>
+        <option value="bday">عيد ميلاد (أول شخص في القائمة)</option>
+        <option value="adha">عيد الأضحى</option>
+        <option value="fitr">عيد الفطر</option>
+        <option value="ramadan">رمضان</option>
+        <option value="friday">يوم الجمعة</option>
+      </select>
+      <label for="l-shift">تظبيط التاريخ الهجري</label>
+      <select id="l-shift">
+        <option value="-1">يوم بدري</option>
+        <option value="0">زي ما هو</option>
+        <option value="1">يوم متأخر</option>
+      </select>
+      <p class="hint">لو الرؤية خلّت رمضان أو العيد يبدأ يوم بعد الحساب، اختار "يوم متأخر".</p>
+      <label for="l-fav">اسم قائمة القنوات</label>
+      <input id="l-fav" type="text" placeholder="أحمد جمال">
+      <button class="btn" id="l-save" type="button">احفظ</button>
+    </section>
+  </div>
+
+  <!-- account -->
+  <div class="tab" data-tab="acct">
+    <section class="card">
+      <h2>بيانات الاشتراك (Xtream Codes)</h2>
+      <p>بتكتبها هنا مرة واحدة، والتلفزيون يسحبها لوحده.</p>
+      <label for="a-server">السيرفر</label>
+      <input id="a-server" type="url" dir="ltr" placeholder="http://server.com:8080" autocomplete="off">
+      <label for="a-user">اسم المستخدم</label>
+      <input id="a-user" type="text" dir="ltr" autocomplete="off" spellcheck="false">
+      <label for="a-pass">كلمة السر</label>
+      <input id="a-pass" type="password" dir="ltr" autocomplete="off">
+      <button class="btn" id="a-save" type="button">احفظ وابعت للتلفزيون</button>
+      <p class="hint">التلفزيون بيقرا البيانات الجديدة في خلال ٣٠ ثانية. شوف "حالة التلفزيون" في الرئيسية عشان تتأكد إنه دخل.</p>
+    </section>
+    <section class="card">
+      <h2>الربط</h2>
+      <p>الموبايل ده متوصّل بالتلفزيون. لو عايز توصّل تلفزيون تاني أو تغيّر المفتاح:</p>
+      <button class="btn ghost" id="disconnect" type="button">افصل الموبايل ده</button>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="admin.js"></script>
+</body>
+</html>
