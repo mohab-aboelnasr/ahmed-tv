@@ -34,8 +34,14 @@
     return r.json();
   }
   async function rpc(fn, args) {
-    const r = await fetch(DB + '/rest/v1/rpc/' + fn, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify(args) });
-    if (!r.ok) throw new Error(r.status === 401 || r.status === 403 || r.status === 404 ? 'denied' : 'http-' + r.status);
+    let r;
+    try { r = await fetch(DB + '/rest/v1/rpc/' + fn, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify(args) }); }
+    catch (e) { const er = new Error('network'); er.detail = 'المتصفح ماقدرش يوصل للسيرفر خالص (' + (e && e.message ? e.message : 'network') + ')'; throw er; }
+    if (!r.ok) {
+      let body = ''; try { body = (await r.text()).slice(0, 200); } catch (e) { /* ignore */ }
+      const er = new Error(r.status === 401 || r.status === 403 || r.status === 404 ? 'denied' : 'http-' + r.status);
+      er.detail = 'رد السيرفر: ' + r.status + (body ? ' · ' + body : ''); throw er;
+    }
     const t = await r.text(); return t ? JSON.parse(t) : null;
   }
   // backend-neutral: whole document, one part, catalog
@@ -339,7 +345,11 @@
     } catch (e) {
       setSync('err', e.message === 'denied' ? 'مرفوض' : 'مفيش اتصال');
       $('neterr').hidden = false;
-      if (e.message === 'denied') showConnect(isSupa() ? 'Supabase رفض الاتصال. اتأكد إنك شغّلت ملف supabase.sql في SQL Editor، وإن مفتاح Supabase صح.' : 'قاعدة البيانات رفضت الاتصال. اتأكد إنك حطيت القواعد من ملف database.rules.json وإن المفتاح ٢٤ حرف أو أكتر.');
+      const why = e.message === 'network' ? 'غالبًا مشروع Supabase واقف (Paused)، أو النت اللي إنت عليه قافل الموقع. افتح supabase.com وشوف المشروع، ولو مكتوب Paused دوس Restore project. أو جرّب من باقة الموبايل بدل الواي فاي.'
+        : /^http-5/.test(e.message) ? 'مشروع Supabase واقف أو لسه بيقوم. افتح supabase.com ودوس Restore project واستنى ٥ دقايق.'
+        : e.message === 'denied' || e.message === 'http-400' ? 'Supabase رد بس رفض الطلب. غالبًا المفتاح غلط أو كود SQL ما اتشغّلش كامل.' : '';
+      $('neterr-why').textContent = why; $('neterr-detail').textContent = e.detail || e.message || '';
+      if (e.message === 'denied' && false) showConnect(isSupa() ? 'Supabase رفض الاتصال. اتأكد إنك شغّلت ملف supabase.sql في SQL Editor، وإن مفتاح Supabase صح.' : 'قاعدة البيانات رفضت الاتصال. اتأكد إنك حطيت القواعد من ملف database.rules.json وإن المفتاح ٢٤ حرف أو أكتر.');
       return false;
     }
   }
