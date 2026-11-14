@@ -52,7 +52,7 @@ img{display:block}
 .clock .d{font-size:20px;color:var(--muted);margin-top:6px}
 
 /* buttons */
-.btn{display:-webkit-inline-flex;display:inline-flex;-webkit-align-items:center;align-items:center;font-size:28px;font-weight:500;padding:20px 32px;border-radius:16px;background:rgba(255,255,255,.09);color:var(--text);margin-left:20px;white-space:nowrap}
+.btn{display:-webkit-inline-flex;display:inline-flex;-webkit-align-items:center;align-items:center;font-size:28px;font-weight:500;padding:20px 28px;border-radius:16px;background:rgba(255,255,255,.09);color:var(--text);margin-left:16px;white-space:nowrap}
 .btn small{font-size:20px;opacity:.75;font-weight:400;margin-right:10px}
 .btn.focus{background:var(--accent);color:var(--bg);box-shadow:0 0 0 4px rgba(255,255,255,.9),0 18px 50px var(--glow)}
 .tri{width:0;height:0;border-top:13px solid transparent;border-bottom:13px solid transparent;border-right:20px solid currentColor;margin-left:16px}
@@ -286,3 +286,74 @@ img{display:block}
 #speed .sph{font-size:22px;color:var(--muted);margin-top:26px}
 .wp small{display:block;font-size:22px;color:var(--muted);margin-top:8px}
 #who-mohab .av{opacity:.55}
+
+/* ---------- v1.3: prayer times, family photos, sleep screen, big text ---------- */
+.pray{margin-top:26px;white-space:nowrap;font-size:0}
+.pray .pc{display:inline-block;width:130px;padding:10px 0;margin-left:10px;border-radius:14px;background:rgba(255,255,255,.06);text-align:center;vertical-align:top}
+.pray .pc i{display:block;font-style:normal;font-size:19px;color:var(--muted)}
+.pray .pc b{display:block;font-size:25px;font-weight:600;margin-top:2px}
+.pray .pc.nx{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+.pray .pc.nx i{color:var(--accent)}
+.pray .pn{display:inline-block;font-size:22px;color:var(--accent);margin-right:14px;vertical-align:middle;line-height:74px}
+.photo{position:absolute;top:196px;left:150px;width:500px;height:262px;border-radius:22px;overflow:hidden;background:#111;box-shadow:0 0 0 3px rgba(255,255,255,.14),0 30px 70px rgba(0,0,0,.55)}
+.photo img{width:100%;height:100%;object-fit:cover;-webkit-transition:opacity .45s;transition:opacity .45s}
+#ps-img{position:absolute;left:0;top:0;width:1920px;height:1080px;object-fit:contain}
+.psmsg{position:absolute;left:0;right:0;top:480px;text-align:center;font-size:40px;color:var(--muted)}
+.pscount{position:absolute;left:0;right:0;bottom:36px;text-align:center;font-size:22px;color:rgba(255,255,255,.7);direction:rtl;text-shadow:0 2px 8px #000}
+.sleepbox{position:absolute;left:0;right:0;top:330px;text-align:center;color:#8d897f}
+.sleepbox b{display:block;font-family:var(--f-display);font-size:200px;line-height:1.1;font-weight:600;color:#b7b2a6}
+.sleepbox span{display:block;font-size:40px;margin-top:10px}
+.sleepbox small{display:block;font-size:26px;margin-top:60px}
+/* big text mode (switched on from the phone) */
+.big .nav .f{font-size:30px;padding:10px 22px}
+.big .btn{font-size:31px}
+.big .btn small{font-size:24px}
+.big .sub{font-size:35px}
+.big .subs{font-size:26px}
+.big .rowt{font-size:38px}
+.big .rowt span{font-size:24px}
+.big .ch .mono{font-size:35px;max-height:86px}
+.big .ch .nm{font-size:23px}
+.big .ch .num{font-size:27px;height:42px;line-height:42px;min-width:44px}
+.big .msg p,.big .notice{font-size:33px;max-height:156px}
+.big .msg .h{font-size:24px}
+.big .pray .pc i{font-size:22px}
+.big .pray .pc b{font-size:29px}
+.big .pray .pn{font-size:26px}
+.big .clock .t{font-size:52px}
+.big .clock .d{font-size:24px}
+.big .li{font-size:34px;height:92px}
+.big .osd h3{font-size:58px}
+.big .osd .no b{font-size:120px}
+.big .epg .ttl{font-size:34px}
+.big .epg .lbl,.big .osd .side .k{font-size:22px}
+.big .toplist{font-size:26px}
+.big .bplot{font-size:30px;max-height:144px}
+.big .bmeta{font-size:28px}
+.big .post .pt{font-size:25px;max-height:64px}
+.big .su{font-size:32px}
+.big .qc b{font-size:31px;max-height:78px}
+.big .qc small{font-size:21px}
+.big #np .npi b{font-size:33px}
+.big #pop p{font-size:40px}
+.big #toast{font-size:31px}
+.big .ep h6{font-size:27px}
+.big .seasons .f{font-size:26px}
+
+/* ---------- simple mode ---------- */
+.simple-home{display:none;position:absolute;left:0;right:0;top:230px;text-align:center}
+.simple .simple-home{display:block}
+.simple #nav{display:none}
+.simple #s-home .hero,.simple #s-home .art,.simple #s-home .photo,.simple #s-home .msg,.simple #s-home .notice,.simple #s-home .subs,.simple #s-home .vwrap{display:none !important}
+.stiles{white-space:nowrap}
+.st{display:inline-block;width:500px;height:440px;margin:0 22px;border-radius:34px;vertical-align:top;position:relative;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+#st-live{background:radial-gradient(70% 60% at 30% 25%,rgba(217,178,106,.45),transparent 70%),linear-gradient(160deg,#3a2c12,#0b0b0d)}
+#st-movies{background:radial-gradient(70% 60% at 30% 25%,rgba(229,72,77,.4),transparent 70%),linear-gradient(160deg,#3b1114,#0b0b0d)}
+#st-series{background:radial-gradient(70% 60% at 30% 25%,rgba(110,168,255,.4),transparent 70%),linear-gradient(160deg,#101e3d,#0b0b0d)}
+.st b{position:absolute;left:0;right:0;top:150px;font-family:var(--f-display);font-size:76px;font-weight:700}
+.st small{position:absolute;left:0;right:0;top:280px;font-size:30px;color:rgba(255,255,255,.7)}
+.sfoot{margin-top:70px}
+.sfoot .btn{margin:0;font-size:24px;padding:14px 30px;color:var(--muted)}
+.sfoot .btn.focus{color:var(--bg)}
+.big .st b{font-size:86px}
+.big .st small{font-size:34px}

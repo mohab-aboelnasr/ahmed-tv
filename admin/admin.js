@@ -41,6 +41,7 @@
   // backend-neutral: whole document, one part, catalog
   const getDoc = () => (isSupa() ? rpc('tv_get', { k: KEY }) : req('GET', 'tv/' + KEY));
   const setPart = (p, v) => (isSupa() ? rpc('tv_set', { k: KEY, p, v }) : req('PUT', 'tv/' + KEY + '/' + p, v));
+  const getPart = (p) => (isSupa() ? rpc('tv_get_part', { k: KEY, p }) : req('GET', 'tv/' + KEY + '/' + p));
   const getCatalog = () => (isSupa() ? rpc('tv_get_part', { k: KEY, p: 'catalog' }) : req('GET', 'catalog/' + KEY));
 
   function genKey() {
@@ -94,6 +95,7 @@
     ls.set('tab', name);
     if (name === 'chs') loadCatalog();
     if (name === 'quran') loadReciters();
+    if (name === 'photos') renderPhotos();
   }
   document.querySelectorAll('#tabs button').forEach((b) => { b.onclick = () => openTab(b.dataset.tab); });
 
@@ -247,6 +249,55 @@
   $('q-q').oninput = renderAllReciters;
   $('q-reset').onclick = () => { qChosen = Q_DEFAULT.map((r) => Object.assign({}, r)); commitQuran(); };
 
+  // ---------- family photos (each photo is its own row "photo_<id>"; settings.photos lists the ids)
+  const phCache = {};
+  const photoList = () => asArray(doc.settings && doc.settings.photos).filter((x) => x && x.id);
+  function shrink(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file), im = new Image();
+      im.onload = () => {
+        const max = 1280, k = Math.min(1, max / Math.max(im.width, im.height));
+        const c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.72));
+      };
+      im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad-image')); };
+      im.src = url;
+    });
+  }
+  function renderPhotos() {
+    const list = photoList(), box = $('ph-list');
+    $('ph-note').textContent = list.length + ' من ١٢ صورة';
+    box.innerHTML = list.map((p) => '<div class="thumb" data-id="' + esc(p.id) + '"><img alt="" ' + (phCache[p.id] ? 'src="' + phCache[p.id] + '"' : '') + '><button class="icon del" type="button" aria-label="امسح">✕</button></div>').join('') || '<p class="empty">مفيش صور لسه.</p>';
+    box.querySelectorAll('.thumb').forEach((t) => {
+      const id = t.dataset.id;
+      if (!phCache[id]) getPart('photo_' + id).then((v) => { if (v && v.d) { phCache[id] = v.d; t.querySelector('img').src = v.d; } }).catch(() => {});
+      t.querySelector('.del').onclick = async () => {
+        const next = photoList().filter((x) => x.id !== id);
+        try { await setPart('photo_' + id, null); } catch (e) { /* row may already be gone */ }
+        await saveSettings({ photos: next }); renderPhotos();
+      };
+    });
+  }
+  $('ph-add').onclick = () => $('ph-file').click();
+  $('ph-file').onchange = async (e) => {
+    const files = [...e.target.files]; e.target.value = '';
+    let list = photoList(), added = 0;
+    for (const f of files) {
+      if (list.length >= 12) { toast('الحد الأقصى ١٢ صورة', true); break; }
+      $('ph-note').textContent = 'بنرفع صورة ' + (added + 1) + ' من ' + files.length + '…';
+      try {
+        const data = await shrink(f), id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        await setPart('photo_' + id, { d: data });
+        phCache[id] = data; list = list.concat([{ id, at: Date.now() }]); added++;
+      } catch (err) {
+        toast(err.message === 'http-400' || err.message === 'denied' ? 'لازم تشغّل تحديث قاعدة البيانات الأول (ملف supabase.sql)' : 'صورة ما اترفعتش، جرّب تاني', true); break;
+      }
+    }
+    if (added) await saveSettings({ photos: list });
+    renderPhotos();
+  };
+
   // ---------- look
   let palette = 'gold';
   function renderLook() {
@@ -257,9 +308,16 @@
     $('l-force').value = s.force || 'auto';
     $('l-shift').value = String(parseInt(s.hijriShift, 10) || 0);
     $('l-fav').value = s.favName || '';
+    $('l-big').checked = !!s.bigText;
+    $('l-start').checked = s.startLive !== false;
+    $('l-sleep').value = String(s.sleepHours == null ? 2 : s.sleepHours);
+    $('l-pray').checked = s.prayer !== false;
+    $('l-adhan').checked = s.adhan !== false;
+    const cn = (s.city && s.city.name) || 'القاهرة';
+    [...$('l-city').options].forEach((o) => { o.selected = o.value.split('|')[0] === cn; });
   }
   document.querySelectorAll('#pal button').forEach((b) => { b.onclick = () => { palette = b.dataset.k; document.querySelectorAll('#pal button').forEach((x) => x.setAttribute('aria-pressed', x === b ? 'true' : 'false')); saveSettings({ palette }); }; });
-  $('l-save').onclick = () => saveSettings({ auto: $('l-auto').checked, force: $('l-force').value, hijriShift: parseInt($('l-shift').value, 10) || 0, favName: $('l-fav').value.trim() }).then(renderFavs);
+  $('l-save').onclick = () => { const c = $('l-city').value.split('|'); saveSettings({ auto: $('l-auto').checked, force: $('l-force').value, hijriShift: parseInt($('l-shift').value, 10) || 0, favName: $('l-fav').value.trim(), bigText: $('l-big').checked, startLive: $('l-start').checked, sleepHours: parseInt($('l-sleep').value, 10) || 0, prayer: $('l-pray').checked, adhan: $('l-adhan').checked, city: { name: c[0], lat: +c[1], lng: +c[2] } }).then(renderFavs); };
 
   // ---------- account
   function renderAccount() { const a = doc.account || {}; $('a-server').value = a.server || ''; $('a-user').value = a.username || ''; $('a-pass').value = a.password || ''; $('a-snippet').textContent = snippet(DB, KEY, ANON); }

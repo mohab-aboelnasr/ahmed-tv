@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.2.0';
+  var VERSION = '1.3.0';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -79,6 +79,7 @@
       return http('PATCH', Remote.url('tv/' + KEY + (p ? '/' + p : '')), o);
     },
     put: function (p, o) { if (!Remote.ok()) return Promise.resolve(); return SUPA ? rpc('tv_set', { k: KEY, p: p, v: o }) : http('PUT', Remote.url('tv/' + KEY + '/' + p), o); },
+    getPart: function (p) { if (!Remote.ok()) return Promise.resolve(null); return SUPA ? rpc('tv_get_part', { k: KEY, p: p }, 30000) : http('GET', Remote.url('tv/' + KEY + '/' + p), undefined, 30000); },
     putCatalog: function (o) { if (!Remote.ok()) return Promise.resolve(); return SUPA ? rpc('tv_set', { k: KEY, p: 'catalog', v: o }, 60000) : http('PUT', Remote.url('catalog/' + KEY), o, 60000); }
   };
 
@@ -101,7 +102,7 @@
   /* ------------------------------------------------------------------ state */
   var S = {
     cfg: store.get('cfg', {}) || {},
-    user: null, liveExt: 'ts', accountError: '', server: 'unknown',
+    user: null, liveExt: 'ts', accountError: '', server: 'unknown', photoMap: {},
     streams: [], byId: {}, cats: [], lists: [],
     li: 0, ci: 0, prev: null,
     movies: null, series: null,
@@ -113,6 +114,9 @@
     mohab: { name: 'مهاب', av: 'م', title: 'Welcome Mohab' }
   };
   function pkey(k) { return k + '_' + S.profile; }
+  function stg() { return S.cfg.settings || {}; }
+  // where the app lands after start: straight to the last channel (like a receiver) unless switched off
+  function startScreen() { return stg().startLive !== false && X.acc && S.lists.length && S.lists[0].items.length ? 'live' : 'home'; }
   function isAhmed() { return S.profile !== 'mohab'; }
   // Ahmed's channel list lives online (edited from the phone); Mohab's is kept on the TV for now
   function favList() { return isAhmed() ? asArray(S.cfg.favorites) : (store.get('favs_mohab', []) || []); }
@@ -267,6 +271,7 @@
         if (p <= 8) return;
         if (horiz) { ov = Math.min(a.bottom, r.bottom) - Math.max(a.top, r.top); sd = Math.abs(by - ay); }
         else { ov = Math.min(a.right, r.right) - Math.max(a.left, r.left); sd = Math.abs(bx - ax); }
+        if (horiz && ov <= 0) return; // left/right never jumps to another row
         var s = p + (ov > 0 ? 0 : sd * 3) + (horiz ? sd * 2 : sd * 0.5);
         if (s < bs) { bs = s; best = b; }
       });
@@ -402,7 +407,7 @@
   var Pop = {
     open: false, prevFocus: null, onBack: null,
     show: function (o) {
-      Pop.prevFocus = F.el; Pop.open = true; Pop.onBack = o.onBack || null;
+      Pop.prevFocus = F.el; Pop.open = true; Pop.onBack = o.onBack || null; Pop.tag = o.tag || '';
       $('pop-k').textContent = o.kicker || ''; $('pop-h').textContent = o.title || ''; $('pop-p').textContent = o.text || '';
       var acts = $('pop-acts'); acts.innerHTML = '';
       each(o.buttons || [{ label: 'تمام' }], function (b) { var x = el('span', 'btn f', esc(b.label)); x._ok = function () { Pop.close(); if (b.fn) b.fn(); }; acts.appendChild(x); });
@@ -446,7 +451,7 @@
       store.set('seenMsg', iso(new Date()) + '|' + t);
       F.set($('om-go'), true);
     },
-    key: function (k) { if (k === 'ok' || k === 'back') { go('home'); return true; } return true; }
+    key: function (k) { if (k === 'ok' || k === 'back') { go(startScreen()); return true; } return true; }
   };
 
   /* ---- who is watching ---- */
@@ -462,7 +467,8 @@
     Screens.movies._built = false; Screens.series._built = false;
     $('pchip').textContent = PROFILES[S.profile].name;
     var t = todaysMessage();
-    if (t && store.get('seenMsg', '') !== iso(new Date()) + '|' + t) go('open'); else go('home');
+    applyBig(); applySimple(); loadPhotos();
+    if (t && store.get('seenMsg', '') !== iso(new Date()) + '|' + t) go('open'); else go(startScreen());
     maybeShowUrgent();
   }
 
@@ -472,6 +478,7 @@
     bar: true,
     enter: function (arg, prev) {
       Home.render();
+      if (isSimple()) { F.set($(prev === 'movies' ? 'st-movies' : prev === 'series' ? 'st-series' : 'st-live'), true); return; }
       if (prev === 'open' || !prev || prev === 'boot') F.set($('h-resume'), true);
       else { var c = F.candidates(); var fav = $('h-rows').querySelector('.ch'); F.set(fav || $('h-resume'), true); }
     },
@@ -480,6 +487,30 @@
     }
   };
   var Home = {
+    _pt: 0,
+    renderPrayer: function () {
+      var box = $('h-pray');
+      if (stg().prayer === false) { show(box, false); return; }
+      var list = prayToday(), now = new Date(), nm = now.getHours() * 60 + now.getMinutes(), next = -1;
+      each(list, function (p, i) { if (next < 0 && p.mins > nm) next = i; });
+      var wait = next < 0 ? list[0].mins + 1440 - nm : list[next].mins - nm; if (next < 0) next = 0;
+      var h = '';
+      each(list, function (p, i) { h += '<span class="pc' + (i === next ? ' nx' : '') + '"><i>' + p.name + '</i><b>' + fmtMins(p.mins) + '</b></span>'; });
+      h += '<span class="pn">' + list[next].name + ' بعد ' + (wait >= 60 ? Math.floor(wait / 60) + ' س ' + (wait % 60) + ' د' : wait + ' دقيقة') + '</span>';
+      box.innerHTML = h; show(box, true);
+    },
+    renderPhoto: function (reset) {
+      var ph = $('h-photo'), ids = photoIds();
+      var on = ids.length > 0 && Home._lookKey === 'normal';
+      show(ph, on); show($('h-art'), !on);
+      if (!on) return;
+      if (reset && ph._src) return;
+      Home._pi = ((Home._pi || 0) + 1) % ids.length;
+      var src = S.photoMap[ids[Home._pi]], im = $('h-photo-img');
+      if (!src || ph._src === src) return;
+      ph._src = src; im.style.opacity = 0;
+      setTimeout(function () { im.src = src; im.style.opacity = 1; }, 450);
+    },
     renderLook: function () {
       var now = new Date(), r = resolveLook(now);
       applyPalette(r.pal);
@@ -488,6 +519,7 @@
       if (r.key === 'normal' && /^[\x00-\x7F]+$/.test(t) && t.indexOf(' ') > 0) { var parts = t.split(' '), first = parts.shift(); w.className = 'welcome latin'; w.innerHTML = esc(first) + ' <em>' + esc(parts.join(' ')) + '</em>'; }
       else { w.className = 'welcome'; w.textContent = t; }
       $('h-sub').textContent = r.sub;
+      Home._lookKey = r.key; Home.renderPrayer(); Home.renderPhoto(true);
       var key = r.key + r.pal.acc;
       if (key !== lastLookKey) { lastLookKey = key; $('h-art').innerHTML = svgArt(r.art, r.pal.acc); $('h-deco').innerHTML = decoHtml(r.deco, r.pal.acc); }
     },
@@ -506,7 +538,7 @@
       if (X.acc) lines += '<div class="ln"><span class="dot" style="background:' + (S.server === 'up' ? '#4ade80' : S.server === 'down' ? '#ef4444' : '#9a968e') + '"></span>السيرفر:<b>' + (S.server === 'up' ? 'شغّال' : S.server === 'down' ? 'واقع دلوقتي' : 'بنتأكد…') + '</b></div>';
       sb.innerHTML = lines; show(sb, !!lines);
       var last = S.byId[(store.get(pkey('last'), {}) || {}).id];
-      $('h-last').textContent = last ? '· ' + String(last.name).slice(0, 18) : '';
+      $('h-last').textContent = last ? '· ' + String(last.name).slice(0, 12) : '';
       var sp = store.get('speed', null);
       $('h-spd').textContent = sp && sp.mbps ? '· ' + fmtMbps(sp.mbps) + ' ميجا' : '· قياس';
     },
@@ -1072,6 +1104,7 @@
     if (changed.account) p = login().then(function () { store.set('catsig', ''); return loadLive(); }).then(function () { S.movies = null; S.series = null; Screens.movies._built = false; Screens.series._built = false; });
     return p.then(function () {
       if (changed.favorites || changed.settings) buildLists();
+      if (changed.settings) { applyBig(); loadPhotos(); }
       if (cur === 'home' && (changed.settings || changed.people || changed.messages || changed.favorites || changed.account)) {
         var keep = F.el; Home.render(); if (keep && keep.offsetParent !== null) F.set(keep, true); else F.set($('h-resume'), true);
       }
@@ -1333,6 +1366,8 @@
     if (e.target && e.target.tagName === 'INPUT') return;
     e.preventDefault();
     if (!cur) return;
+    lastKeyAt = Date.now();
+    if (Pop.open && Pop.tag === 'sleep') { Pop.close(); return; }
     if (Pop.open) { Pop.key(k); return; }
     if (Speed.open) { Speed.key(k); return; }
     var sc = Screens[cur];
@@ -1359,7 +1394,10 @@
     app.id = 'app';
     app.innerHTML = [
       '<div id="topbar" class="hidden"><div class="brand"><div class="mark">M</div><b>Mohab <i>TV</i></b><span class="pchip" id="pchip"></span></div>',
-      '<div class="nav" id="nav"><span class="f" data-go="home" id="nav-home">الرئيسية</span><span class="f" data-go="live" id="nav-live">البث المباشر</span><span class="f" data-go="movies" id="nav-movie">الأفلام</span><span class="f" data-go="series" id="nav-series">المسلسلات</span><span class="f" data-go="quran" id="nav-quran">القرآن الكريم</span></div>',
+      '<div class="nav" id="nav"><span class="f" data-go="home" id="nav-home">الرئيسية</span><span class="f" data-go="live" id="nav-live">البث المباشر</span><span class="f" data-go="movies" id="nav-movie">الأفلام</span><span class="f" data-go="series" id="nav-series">المسلسلات</span><span class="f" data-go="quran" id="nav-quran">القرآن الكريم</span><span class="f" data-go="photos" id="nav-photos">الصور</span></div>',
+
+      '<section class="screen" id="s-photos"><div class="fill" style="background:#000"></div><img id="ps-img" alt=""><div class="psmsg hidden" id="ps-msg">مفيش صور لسه. مهاب هيبعتها من الموبايل.</div><div class="pscount" id="ps-count"></div></section>',
+      '<section class="screen" id="s-sleep"><div class="fill" style="background:#000"></div><div class="sleepbox"><b id="sl-clock"></b><span id="sl-date"></span><small>البث واقف. دوسوا أي زرار عشان ترجعوا.</small></div></section>',
 
       '<section class="screen" id="s-who"><div class="fill amb"></div><div class="fill grain"></div><div class="who"><div class="wbrand"><div class="mark">M</div><b>Mohab <i>TV</i></b></div><h2>مين اللي هيتفرج؟</h2>',
       '<div class="wrow"><div class="wp f" id="who-ahmed"><span class="av">أ</span><b>أحمد جمال</b></div><div class="wp f" id="who-mohab"><span class="av">م</span><b>مهاب</b><small>قريبًا</small></div></div></div></section>',
@@ -1370,7 +1408,9 @@
       '<section class="screen" id="s-home"><div class="fill amb"></div><div class="fill grain"></div><div class="fill deco" id="h-deco"></div>',
       '<div class="subs hidden" id="h-subs"></div><div class="art" id="h-art"></div>',
       '<div class="hero"><div class="eyebrow" id="h-eye"></div><h1 class="welcome" id="h-title"></h1><div class="sub" id="h-sub"></div>',
-      '<div class="ctas"><span class="btn f" id="h-resume"><span class="tri"></span>كمّل المشاهدة<small id="h-last"></small></span><span class="btn f" id="h-all">كل القنوات</span><span class="btn f" id="h-speed">سرعة النت<small id="h-spd"></small></span></div></div>',
+      '<div class="ctas"><span class="btn f" id="h-resume"><span class="tri"></span>كمّل المشاهدة<small id="h-last"></small></span><span class="btn f" id="h-all">كل القنوات</span><span class="btn f" id="h-speed">سرعة النت<small id="h-spd"></small></span><span class="btn f" id="h-simple-on">وضع بسيط</span></div><div class="pray hidden" id="h-pray"></div></div>',
+      '<div class="simple-home" id="h-simple"><div class="stiles"><div class="st f" id="st-live"><b>البث المباشر</b><small>القنوات</small></div><div class="st f" id="st-movies"><b>الأفلام</b><small>من الاشتراك</small></div><div class="st f" id="st-series"><b>المسلسلات</b><small>من الاشتراك</small></div></div><div class="sfoot"><span class="btn f" id="st-full">رجوع للوضع الكامل</span></div></div>',
+      '<div class="photo hidden" id="h-photo"><img id="h-photo-img" alt=""></div>',
       '<div class="msg hidden" id="h-msg"><div class="h"><b>رسالة من مهاب</b><span>النهارده</span></div><p id="h-msgt"></p></div><div class="notice hidden" id="h-notice"></div>',
       '<div class="vwrap" style="top:690px;height:390px"><div class="vscroll" id="h-rows"></div></div></section>',
 
@@ -1409,10 +1449,15 @@
     $('h-resume')._ok = function () { go('live'); };
     $('h-all')._ok = function () { go('live', { openList: true }); };
     $('h-speed')._ok = function () { Speed.show(); };
+    $('h-simple-on')._ok = function () { setSimple(true); };
+    $('st-full')._ok = function () { setSimple(false); };
+    $('st-live')._ok = function () { go('live'); };
+    $('st-movies')._ok = function () { go('movies'); };
+    $('st-series')._ok = function () { go('series'); };
     $('who-ahmed')._ok = function () { selectProfile('ahmed'); };
     // Mohab's section is not built yet: show a notice and stay on the picker
     $('who-mohab')._ok = function () { Pop.show({ kicker: 'مهاب', title: 'قريبًا', text: 'القسم ده لسه بيتجهّز. اختاروا أحمد جمال.', buttons: [{ label: 'تمام' }] }); };
-    $('om-go')._ok = function () { go('home'); };
+    $('om-go')._ok = function () { go(startScreen()); };
   }
   function vodHtml(name, P) {
     return '<section class="screen" id="s-' + name + '"><div class="fill" style="background:var(--bg)"></div>' +
@@ -1424,7 +1469,123 @@
     var d = new Date(); $('clk').textContent = fmtClock(d); $('dt').textContent = fmtDate(d);
     if (cur === 'home') { var m = d.getMinutes(); if (m === 0 || m === 30) Home.renderLook(); }
     if (cur === 'home' && Home._day !== iso(d)) { Home._day = iso(d); Home.render(); maybeShowTodayMessage(); }
+    if (cur === 'home') { Home.renderPrayer(); if (++Home._pt % 2 === 0) Home.renderPhoto(); }
+    if (cur === 'sleep') { $('sl-clock').textContent = fmtClock(d); $('sl-date').textContent = fmtDate(d); }
+    checkAdhan(d); checkSleep();
   }
+
+  /* -------------------------------------------- adhan alert, sleep timer, big text */
+  var lastKeyAt = Date.now();
+  function checkAdhan(d) {
+    if (stg().prayer === false || stg().adhan === false || !isAhmed() || !cur || cur === 'who' || cur === 'sleep') return;
+    var nm = d.getHours() * 60 + d.getMinutes();
+    each(prayToday(), function (p) {
+      if (p.mins !== nm) return;
+      var key = iso(d) + p.k; if (store.get('adhan', '') === key) return;
+      store.set('adhan', key);
+      if (Pop.open) return;
+      var tag = 'adhan' + key;
+      Pop.show({ kicker: 'حان الآن', title: 'موعد أذان ' + p.name, text: 'حسب توقيت ' + ((stg().city && stg().city.name) || CITY_DEFAULT.name) + ' · ' + fmtMins(p.mins), buttons: [{ label: 'تمام' }], tag: tag });
+      setTimeout(function () { if (Pop.open && Pop.tag === tag) Pop.close(); }, 60000);
+    });
+  }
+  function checkSleep() {
+    var hrs = stg().sleepHours == null ? 2 : +stg().sleepHours;
+    if (!hrs || Pop.open || !cur) return;
+    if (!(cur === 'live' || cur === 'player' || Q.cur)) return;
+    if (Date.now() - lastKeyAt < hrs * 3600000) return;
+    Pop.show({ kicker: 'مؤقت النوم', title: 'لسه بتتفرجوا؟', text: 'محدش داس على الريموت من ' + hrs + ' ساعة. لو مفيش رد، البث هيقف بعد دقيقة.', buttons: [{ label: 'أيوه، كمّل' }], tag: 'sleep' });
+    setTimeout(function () { if (Pop.open && Pop.tag === 'sleep') { Pop.close(); qStop(); go('sleep'); } }, 60000);
+  }
+  // simple mode: the home screen becomes three big tiles (live TV, movies, series) and nothing else
+  function isSimple() { return !!store.get('simple', false); }
+  function applySimple() { document.documentElement.classList.toggle('simple', isSimple()); }
+  function setSimple(on) { store.set('simple', !!on); applySimple(); go('home'); }
+  function applyBig() { document.documentElement.classList.toggle('big', !!stg().bigText); }
+  Screens.sleep = {
+    enter: function () { var d = new Date(); $('sl-clock').textContent = fmtClock(d); $('sl-date').textContent = fmtDate(d); },
+    key: function () { go(startScreen()); return true; }
+  };
+
+  /* ------------------------------------------------------------ family photos */
+  // Photos are sent from the phone panel, one database row each (photo_<id>); settings.photos lists the ids.
+  function photoIds() { return asArray(stg().photos).map(function (x) { return String(x && x.id ? x.id : x); }).filter(function (id) { return !!S.photoMap[id]; }); }
+  function loadPhotos() {
+    S.photoMap = S.photoMap || {};
+    var want = asArray(stg().photos).map(function (x) { return String(x && x.id ? x.id : x); });
+    for (var k in S.photoMap) if (want.indexOf(k) < 0) delete S.photoMap[k];
+    var missing = want.filter(function (id) { return !S.photoMap[id]; });
+    if (!missing.length || loadPhotos._busy || MOCK) return;
+    loadPhotos._busy = true;
+    (function next() {
+      var id = missing.shift();
+      if (!id) { loadPhotos._busy = false; if (cur === 'home') Home.renderPhoto(true); return; }
+      Remote.getPart('photo_' + id).then(function (v) { if (v && v.d) S.photoMap[id] = v.d; }).catch(function () { }).then(function () { if (cur === 'home') Home.renderPhoto(true); next(); });
+    })();
+  }
+  var PS = { i: 0, t: null };
+  Screens.photos = {
+    enter: function () { PS.i = 0; psDraw(); clearInterval(PS.t); PS.t = setInterval(function () { psMove(1); }, 7000); },
+    leave: function () { clearInterval(PS.t); },
+    key: function (k) {
+      if (k === 'left' || k === 'ok') { psMove(1); return true; }
+      if (k === 'right') { psMove(-1); return true; }
+      if (k === 'back') { go('home'); return true; }
+      return true;
+    }
+  };
+  function psMove(d) { var n = photoIds().length; if (!n) return; PS.i = (PS.i + d + n) % n; psDraw(); }
+  function psDraw() {
+    var ids = photoIds(), im = $('ps-img');
+    show($('ps-msg'), !ids.length); show(im, ids.length > 0);
+    $('ps-count').textContent = ids.length ? (PS.i + 1) + ' / ' + ids.length + '   ·   ◀ ▶ للتقليب · رجوع للخروج' : 'رجوع للخروج';
+    if (ids.length) im.src = S.photoMap[ids[PS.i % ids.length]];
+  }
+
+  /* ----------------------------------------------------------- prayer times */
+  // Astronomical calculation (same method as praytimes.org), Egyptian General Authority angles:
+  // Fajr 19.5 degrees, Isha 17.5 degrees, Asr = shadow equals object length. No internet needed.
+  function prayerTimes(date, lat, lng, tz) {
+    var R = Math.PI / 180;
+    function sin(d) { return Math.sin(d * R); } function cos(d) { return Math.cos(d * R); } function tan(d) { return Math.tan(d * R); }
+    function asin(x) { return Math.asin(x) / R; } function acos(x) { return Math.acos(x) / R; } function atan2(y, x) { return Math.atan2(y, x) / R; } function acot(x) { return Math.atan(1 / x) / R; }
+    function fix(a, b) { a = a - b * Math.floor(a / b); return a < 0 ? a + b : a; }
+    var y = date.getFullYear(), m = date.getMonth() + 1, d = date.getDate();
+    if (m <= 2) { y -= 1; m += 12; }
+    var A = Math.floor(y / 100), B = 2 - A + Math.floor(A / 4);
+    var jd = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + B - 1524.5 - lng / (15 * 24);
+    function sun(j) {
+      var D = j - 2451545.0, g = fix(357.529 + 0.98560028 * D, 360), q = fix(280.459 + 0.98564736 * D, 360);
+      var L = fix(q + 1.915 * sin(g) + 0.020 * sin(2 * g), 360), e = 23.439 - 0.00000036 * D;
+      var RA = atan2(cos(e) * sin(L), cos(L)) / 15;
+      return { decl: asin(sin(e) * sin(L)), eqt: q / 15 - fix(RA, 24) };
+    }
+    function mid(t) { return fix(12 - sun(jd + t).eqt, 24); }
+    function angle(a, t, ccw) {
+      var dec = sun(jd + t).decl, noon = mid(t);
+      var T = acos((-sin(a) - sin(dec) * sin(lat)) / (cos(dec) * cos(lat))) / 15;
+      return noon + (ccw ? -T : T);
+    }
+    function asr(t) { var dec = sun(jd + t).decl; return angle(-acot(1 + tan(Math.abs(lat - dec))), t); }
+    var adj = tz - lng / 15;
+    return {
+      fajr: angle(19.5, 5 / 24, true) + adj, sunrise: angle(0.833, 6 / 24, true) + adj, dhuhr: mid(12 / 24) + adj + 1 / 60,
+      asr: asr(13 / 24) + adj, maghrib: angle(0.833, 18 / 24) + adj, isha: angle(17.5, 18 / 24) + adj
+    };
+  }
+  var CITY_DEFAULT = { name: 'القاهرة', lat: 30.0444, lng: 31.2357 };
+  var PRAY = [['fajr', 'الفجر'], ['dhuhr', 'الظهر'], ['asr', 'العصر'], ['maghrib', 'المغرب'], ['isha', 'العشاء']];
+  function prayToday() {
+    var c = stg().city && stg().city.lat ? stg().city : CITY_DEFAULT, d = new Date(), tz = -d.getTimezoneOffset() / 60;
+    var key = iso(d) + '|' + c.lat + '|' + c.lng + '|' + tz;
+    if (prayToday._k !== key) {
+      var t = prayerTimes(d, +c.lat, +c.lng, tz);
+      prayToday._v = PRAY.map(function (p) { var h = ((t[p[0]] % 24) + 24) % 24; return { k: p[0], name: p[1], mins: Math.round(h * 60) % 1440 }; });
+      prayToday._k = key;
+    }
+    return prayToday._v;
+  }
+  function fmtMins(m) { var h = Math.floor(m / 60), mm = m % 60; return ((h % 12) || 12) + ':' + pad(mm) + (h < 12 ? ' ص' : ' م'); }
 
   /* ---------------------------------------------------------------- mock */
   function mockData() {
