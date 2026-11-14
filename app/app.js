@@ -1,4 +1,4 @@
-/* Ahmed TV - TV app.
+/* Mohab TV - TV app.
  * Runs inside the Tizen shell (tizen-shell/), which defines window.AHMED_TV = {db, key, ...}
  * and loads this file from the web (or from its bundled copy when offline).
  * Target: Samsung Tizen 4.0 (2018) = Chromium 56. Keep to ES5 + Promise/XHR.
@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -105,8 +105,18 @@
     streams: [], byId: {}, cats: [], lists: [],
     li: 0, ci: 0, prev: null,
     movies: null, series: null,
-    resume: store.get('resume', []) || []
+    resume: [],
+    profile: 'ahmed'
   };
+  var PROFILES = {
+    ahmed: { name: 'أحمد جمال', av: 'أ', title: 'Welcome Ahmed Gamal' },
+    mohab: { name: 'مهاب', av: 'م', title: 'Welcome Mohab' }
+  };
+  function pkey(k) { return k + '_' + S.profile; }
+  function isAhmed() { return S.profile !== 'mohab'; }
+  // Ahmed's channel list lives online (edited from the phone); Mohab's is kept on the TV for now
+  function favList() { return isAhmed() ? asArray(S.cfg.favorites) : (store.get('favs_mohab', []) || []); }
+  function favName() { return isAhmed() ? ((S.cfg.settings && S.cfg.settings.favName) || 'أحمد جمال') : 'مهاب'; }
 
   /* --------------------------------------------------------------- occasions */
   var PAL = {
@@ -157,7 +167,7 @@
   function resolveLook(now) {
     var st = S.cfg.settings || {}, h = now.getHours(), g = greeting(h);
     var pal = PAL[st.palette] || PAL.gold;
-    var r = { pal: pal, key: 'normal', eyebrow: g.e, title: st.title || 'Welcome Ahmed Gamal', sub: st.sub || g.s, art: 'normal', deco: 'none' };
+    var r = { pal: pal, key: 'normal', eyebrow: g.e, title: isAhmed() ? (st.title || PROFILES.ahmed.title) : (st.titleMohab || PROFILES.mohab.title), sub: isAhmed() ? (st.sub || g.s) : 'أهلاً يا مهاب، كل حاجة جاهزة', art: 'normal', deco: 'none' };
     var md = iso(now).slice(5), hj = hijri(now), c = {};
     each(asArray(S.cfg.people), function (p) { if (p && p.date && String(p.date).slice(-5) === md && !c.bday) c.bday = p; });
     if (hj.month === 12 && hj.day >= 9 && hj.day <= 13) c.adha = 1;
@@ -190,7 +200,7 @@
     if (kind === 'friday') { var a = ''; for (var i = 0; i < 5; i++) { var x = 60 + i * 130; a += '<path d="M' + x + ' 470 V250 Q' + x + ' 170 ' + (x + 55) + ' 140 Q' + (x + 110) + ' 170 ' + (x + 110) + ' 250 V470" fill="none" stroke="' + acc + '" stroke-opacity="' + (0.25 + i * 0.12) + '" stroke-width="3"/>'; } return '<svg viewBox="0 0 720 520">' + a + '</svg>'; }
     if (kind === 'bday') return '<svg viewBox="0 0 720 520"><g stroke="' + acc + '" stroke-width="2" fill="none"><path d="M250 330 Q240 420 270 500"/><path d="M380 300 Q400 400 370 500"/><path d="M500 340 Q480 430 510 500"/></g><ellipse cx="250" cy="260" rx="62" ry="76" fill="' + acc + '" opacity=".9"/><ellipse cx="380" cy="220" rx="70" ry="86" fill="#fff" opacity=".88"/><ellipse cx="500" cy="270" rx="58" ry="72" fill="' + acc + '" opacity=".6"/></svg>';
     if (kind === 'eid') { var s = ''; for (var j = 0; j < 8; j++) { var an = j * Math.PI / 4, rr = j % 2 ? 95 : 180; s += (j ? 'L' : 'M') + (380 + Math.cos(an) * rr).toFixed(1) + ' ' + (250 + Math.sin(an) * rr).toFixed(1); } return '<svg viewBox="0 0 720 520"><g fill="none" stroke="' + acc + '" stroke-width="3"><path d="' + s + 'Z"/><path d="' + s + 'Z" transform="rotate(22.5 380 250)" opacity=".45"/><circle cx="380" cy="250" r="230" opacity=".2"/></g><circle cx="380" cy="250" r="46" fill="' + acc + '"/></svg>'; }
-    return '<svg viewBox="0 0 720 520"><g fill="none" stroke="' + acc + '"><circle cx="380" cy="250" r="220" stroke-opacity=".18" stroke-width="2"/><circle cx="380" cy="250" r="160" stroke-opacity=".3" stroke-width="2"/><circle cx="380" cy="250" r="100" stroke-opacity=".55" stroke-width="3"/></g><text x="380" y="284" text-anchor="middle" font-family="Reem Kufi,sans-serif" font-size="100" font-weight="700" fill="' + acc + '">A</text></svg>';
+    return '<svg viewBox="0 0 720 520"><g fill="none" stroke="' + acc + '"><circle cx="380" cy="250" r="220" stroke-opacity=".18" stroke-width="2"/><circle cx="380" cy="250" r="160" stroke-opacity=".3" stroke-width="2"/><circle cx="380" cy="250" r="100" stroke-opacity=".55" stroke-width="3"/></g><text x="380" y="284" text-anchor="middle" font-family="Reem Kufi,sans-serif" font-size="100" font-weight="700" fill="' + acc + '">M</text></svg>';
   }
   function decoHtml(kind, acc) {
     var h = '', i;
@@ -202,6 +212,7 @@
 
   function asArray(v) { if (!v) return []; if (Array.isArray(v)) return v.filter(function (x) { return x != null; }); return Object.keys(v).map(function (k) { return v[k]; }); }
   function todaysMessage() {
+    if (!isAhmed()) return '';
     var m = (S.cfg.messages || {})[iso(new Date())];
     if (!m) return '';
     return typeof m === 'string' ? m : (m.text || '');
@@ -326,6 +337,7 @@
     },
     emit: function (ev, a) { var f = Player.opts['on' + ev]; if (f) try { f(a); } catch (e) { } },
     play: function (url, opts) {
+      qStop();
       Player.stop();
       Player.opts = opts || {}; Player.playing = false; Player.cur = 0; Player.dur = 0;
       var tk = ++Player.token;
@@ -418,6 +430,7 @@
     show($('topbar'), !!Screens[name].bar);
     each(document.querySelectorAll('#nav .f'), function (n) { n.classList.toggle('act', n.getAttribute('data-go') === name); });
     if (!Screens[name].video) { document.body.classList.remove('video'); if (prev && Screens[prev] && Screens[prev].video) Player.stop(); }
+    show($('np'), !!Q.cur && !Screens[name].video && name !== 'who');
     F.root = $('s-' + name);
     if (F.el) F.el.classList.remove('focus');
     F.el = null;
@@ -436,6 +449,23 @@
     key: function (k) { if (k === 'ok' || k === 'back') { go('home'); return true; } return true; }
   };
 
+  /* ---- who is watching ---- */
+  Screens.who = {
+    enter: function () { F.set($('who-' + S.profile) || $('who-ahmed'), true); },
+    back: function () { Pop.show({ kicker: 'Mohab TV', title: 'تقفلوا التطبيق؟', text: '', buttons: [{ label: 'لأ، خليه' }, { label: 'أيوه اقفل', fn: exitApp }] }); }
+  };
+  function selectProfile(p) {
+    S.profile = p === 'mohab' ? 'mohab' : 'ahmed'; store.set('profile', S.profile); store.set('profileSet', 1);
+    S.resume = store.get(pkey('resume'), []) || [];
+    S.li = 0; S.ci = 0; S.prev = null; lastLookKey = '';
+    buildLists();
+    Screens.movies._built = false; Screens.series._built = false;
+    $('pchip').textContent = PROFILES[S.profile].name;
+    var t = todaysMessage();
+    if (t && store.get('seenMsg', '') !== iso(new Date()) + '|' + t) go('open'); else go('home');
+    maybeShowUrgent();
+  }
+
   /* ---- home ---- */
   var lastLookKey = '';
   Screens.home = {
@@ -446,7 +476,7 @@
       else { var c = F.candidates(); var fav = $('h-rows').querySelector('.ch'); F.set(fav || $('h-resume'), true); }
     },
     back: function () {
-      Pop.show({ kicker: 'Ahmed TV', title: 'تقفلوا التطبيق؟', text: '', buttons: [{ label: 'لأ، خليه' }, { label: 'أيوه اقفل', fn: exitApp }] });
+      Pop.show({ kicker: 'Mohab TV', title: 'عايزين تعملوا إيه؟', text: '', buttons: [{ label: 'رجوع' }, { label: 'تغيير المستخدم', fn: function () { qStop(); go('who'); } }, { label: 'اقفل التطبيق', fn: exitApp }] });
     }
   };
   var Home = {
@@ -475,8 +505,10 @@
         show(sb, true);
       } else if (u && u.status) { sb.innerHTML = '<span class="dot"></span>الاشتراك: <b>' + esc(u.status === 'Active' ? 'شغّال' : u.status) + '</b>'; show(sb, true); }
       else show(sb, false);
-      var last = S.byId[(store.get('last', {}) || {}).id];
-      $('h-last').textContent = last ? '· ' + last.name : '';
+      var last = S.byId[(store.get(pkey('last'), {}) || {}).id];
+      $('h-last').textContent = last ? '· ' + String(last.name).slice(0, 18) : '';
+      var sp = store.get('speed', null);
+      $('h-spd').textContent = sp && sp.mbps ? '· ' + fmtMbps(sp.mbps) + ' ميجا' : '· قياس';
     },
     renderRows: function () {
       var rows = $('h-rows'); rows.innerHTML = ''; resetScroll($('s-home'));
@@ -529,7 +561,7 @@
   Screens.live = {
     video: true,
     enter: function (arg) {
-      var last = store.get('last', {}) || {};
+      var last = store.get(pkey('last'), {}) || {};
       if (arg && arg.li != null) { S.li = arg.li; S.ci = arg.ci; }
       else if (!S.lists[S.li] || !S.lists[S.li].items[S.ci]) {
         var pos = findChannel(last.id, last.list); S.li = pos.li; S.ci = pos.ci;
@@ -592,7 +624,7 @@
       });
     }
     attempt();
-    store.set('last', { id: c.id, list: S.lists[S.li].name });
+    store.set(pkey('last'), { id: c.id, list: S.lists[S.li].name });
     Status.watching = c.name; Status.soon();
     loadEpg(c);
   }
@@ -628,13 +660,13 @@
   }
   function toggleFav() {
     var c = S.lists[S.li].items[S.ci]; if (!c) return;
-    var favs = asArray(S.cfg.favorites).slice(), idx = -1;
+    var favs = favList().slice(), idx = -1;
     each(favs, function (f, i) { if (f && +f.id === c.id) idx = i; });
-    if (idx >= 0) { favs.splice(idx, 1); toast('اتشالت ' + c.name + ' من قائمة أحمد جمال'); }
-    else { favs.push({ id: c.id, name: c.name }); toast('اتضافت ' + c.name + ' لقائمة أحمد جمال رقم ' + favs.length); }
-    S.cfg.favorites = favs; store.set('cfg', S.cfg);
+    if (idx >= 0) { favs.splice(idx, 1); toast('اتشالت ' + c.name + ' من قائمة ' + favName()); }
+    else { favs.push({ id: c.id, name: c.name }); toast('اتضافت ' + c.name + ' لقائمة ' + favName() + ' رقم ' + favs.length); }
+    if (isAhmed()) { S.cfg.favorites = favs; store.set('cfg', S.cfg); } else store.set('favs_mohab', favs);
     var curId = c.id; buildLists(); var p = findChannel(curId, S.lists[S.li] ? S.lists[S.li].name : null); S.li = p.li; S.ci = p.ci;
-    Remote.put('favorites', favs).catch(function () { toast('مقدرتش أحفظ التغيير أونلاين، هيتحفظ على التلفزيون بس'); });
+    if (isAhmed()) Remote.put('favorites', favs).catch(function () { toast('مقدرتش أحفظ التغيير أونلاين، هيتحفظ على التلفزيون بس'); });
   }
 
   // channel list overlay
@@ -651,7 +683,7 @@
     }
     box.innerHTML = h;
   }
-  function favIdMap() { var m = {}; each(asArray(S.cfg.favorites), function (f) { if (f) m[+f.id] = 1; }); return m; }
+  function favIdMap() { var m = {}; each(favList(), function (f) { if (f) m[+f.id] = 1; }); return m; }
   function listKey(k) {
     var n = S.lists[LS.li].items.length;
     if (k === 'up') LS.sel = (LS.sel - 1 + n) % n;
@@ -898,7 +930,7 @@
         onbuffer: function (b) { show($('p-spin'), b); },
         ontime: function () { drawBar(); },
         onend: function () { savePos(true); if (V.next) { toast('الحلقة الجاية…'); V.next(); } else go(V.backTo || 'home'); },
-        onerror: function () { show($('p-spin'), false); Pop.show({ kicker: 'Ahmed TV', title: 'الفيديو مش راضي يشتغل', text: 'ممكن تكون مشكلة في السيرفر. جرّبوا كمان شوية أو اختاروا حاجة تانية.', buttons: [{ label: 'رجوع', fn: function () { go(V.backTo || 'home'); } }], onBack: function () { go(V.backTo || 'home'); } }); }
+        onerror: function () { show($('p-spin'), false); Pop.show({ kicker: 'Mohab TV', title: 'الفيديو مش راضي يشتغل', text: 'ممكن تكون مشكلة في السيرفر. جرّبوا كمان شوية أو اختاروا حاجة تانية.', buttons: [{ label: 'رجوع', fn: function () { go(V.backTo || 'home'); } }], onBack: function () { go(V.backTo || 'home'); } }); }
       });
       clearInterval(saveT); saveT = setInterval(function () { savePos(false); }, 10000);
       F.el = null;
@@ -940,7 +972,7 @@
     S.resume = S.resume.filter(function (x) { return !(x.type === r.type && x.id === r.id); });
     var drop = r.type === 'movie' && (finished || p / d > 0.95);
     if (!drop) S.resume.unshift(r);
-    S.resume = S.resume.slice(0, 30); store.set('resume', S.resume);
+    S.resume = S.resume.slice(0, 30); store.set(pkey('resume'), S.resume);
   }
   function playMovie(it, ext, start) {
     go('player', { url: X.acc ? X.movieUrl(it.id, ext) : '', title: it.name, sub: it.year || '', start: start, backTo: 'detail', backArg: { type: 'movie', item: it },
@@ -964,10 +996,10 @@
 
   /* --------------------------------------------------------------- data */
   function buildLists() {
-    var favIds = asArray(S.cfg.favorites), fav = [];
+    var favIds = favList(), fav = [];
     each(favIds, function (f) { if (!f) return; var c = S.byId[+f.id]; if (c) fav.push(c); });
     var lists = [];
-    lists.push({ name: (S.cfg.settings && S.cfg.settings.favName) || 'أحمد جمال', items: fav.length ? fav : S.streams.slice(0, 200), fav: true });
+    lists.push({ name: favName(), items: fav.length ? fav : S.streams.slice(0, 200), fav: true });
     var byCat = {};
     each(S.streams, function (s) { (byCat[s.cat] = byCat[s.cat] || []).push(s); });
     each(S.cats, function (c) { if (byCat[c.id] && byCat[c.id].length) lists.push({ name: c.name, items: byCat[c.id] }); });
@@ -1036,12 +1068,12 @@
   function maybeShowTodayMessage() {
     var t = todaysMessage(); if (!t) return;
     var key = iso(new Date()) + '|' + t; if (store.get('seenMsg', '') === key) return;
-    if (cur === 'open') return;
+    if (cur === 'open' || cur === 'who') return;
     store.set('seenMsg', key);
     Pop.show({ kicker: 'رسالة جديدة', title: 'من مهاب', text: t, buttons: [{ label: 'تمام' }] });
   }
   function maybeShowUrgent() {
-    var u = S.cfg.urgent; if (!u || !u.text) return;
+    var u = S.cfg.urgent; if (!u || !u.text || !isAhmed() || cur === 'who') return;
     var id = String(u.id || u.at || u.text); if (store.get('seenUrgent', '') === id) return;
     if (u.at && Date.now() - u.at > 2 * 864e5) return;
     store.set('seenUrgent', id);
@@ -1060,11 +1092,220 @@
       var c = cur === 'live' && S.lists[S.li] && S.lists[S.li].items[S.ci];
       Remote.patch('status', {
         lastSeen: { '.sv': 'timestamp' }, version: VERSION, shell: CFG.shellVersion || '', screen: cur || '',
-        watching: cur === 'live' && c ? c.name : (cur === 'player' ? (V.title || '') + (V.sub ? ' · ' + V.sub : '') : ''),
+        profile: S.profile,
+        watching: Q.cur ? 'قرآن: ' + Q.cur.title + ' · ' + Q.cur.sub : cur === 'live' && c ? c.name : (cur === 'player' ? (V.title || '') + (V.sub ? ' · ' + V.sub : '') : ''),
         exp: S.user && S.user.exp ? S.user.exp : null, accountOk: !!S.user && !S.accountError, error: S.accountError || '', channels: S.streams.length
       }).catch(function () { });
     }
   };
+
+  /* ---------------------------------------------------------------- speed test */
+  function fmtMbps(v) { return v >= 10 ? String(Math.round(v)) : String(Math.round(v * 10) / 10); }
+  var Speed = {
+    open: false, running: false, xhr: null, t: null,
+    show: function () { Speed.open = true; show($('speed'), true); Speed.run(); },
+    close: function () { Speed.stop(); Speed.open = false; show($('speed'), false); if (cur === 'home') Home.renderInfo(); },
+    stop: function () { Speed.running = false; clearInterval(Speed.t); if (Speed.xhr) { try { Speed.xhr.abort(); } catch (e) { } Speed.xhr = null; } },
+    draw: function (v, msg, hint) {
+      $('sp-num').textContent = fmtMbps(v); $('sp-bar').style.width = clamp(v / 50 * 100, 1, 100) + '%';
+      if (msg != null) $('sp-msg').textContent = msg; if (hint != null) $('sp-hint').textContent = hint;
+    },
+    verdict: function (v) {
+      if (v < 2) return 'النت ضعيف جدًا، القنوات هتقطّع.';
+      if (v < 5) return 'النت يكفي القنوات العادية بس، ممكن يقطّع في HD.';
+      if (v < 12) return 'النت كويس للقنوات HD.';
+      if (v < 25) return 'النت ممتاز للقنوات والأفلام بجودة عالية.';
+      return 'النت ممتاز جدًا، يكفي أعلى جودة.';
+    },
+    finish: function (v, failed) {
+      Speed.stop();
+      if (failed && !v) { Speed.draw(0, 'مقدرناش نقيس السرعة. اتأكدوا إن النت شغّال وجرّبوا تاني.', 'OK إعادة القياس · رجوع للخروج'); return; }
+      store.set('speed', { mbps: v, at: Date.now() });
+      Speed.draw(v, Speed.verdict(v), 'OK إعادة القياس · رجوع للخروج');
+    },
+    run: function () {
+      Speed.stop(); Speed.running = true;
+      Speed.draw(0, 'بنقيس سرعة التحميل…', 'استنوا ثواني');
+      if (MOCK) { var n = 0, target = 18 + Math.random() * 20; Speed.t = setInterval(function () { n++; var v = target * Math.min(1, n / 12) * (0.9 + Math.random() * 0.2); Speed.draw(v); if (n >= 24) Speed.finish(target); }, 250); return; }
+      var total = 0, start = 0, lastLoaded = 0, MAXMS = 8000;
+      function mbps() { var dt = (Date.now() - start) / 1000; return dt > 0.25 ? (total * 8 / 1e6) / dt : 0; }
+      function one() {
+        var x = Speed.xhr = new XMLHttpRequest(); lastLoaded = 0;
+        x.open('GET', 'https://speed.cloudflare.com/__down?bytes=25000000&r=' + Date.now() + Math.random(), true);
+        x.responseType = 'arraybuffer';
+        x.onprogress = function (e) {
+          if (!Speed.running) return;
+          if (!start) { start = Date.now(); lastLoaded = e.loaded; return; }
+          total += e.loaded - lastLoaded; lastLoaded = e.loaded;
+          Speed.draw(mbps());
+          if (Date.now() - start >= MAXMS) Speed.finish(mbps());
+        };
+        x.onload = function () { if (!Speed.running) return; if (start && Date.now() - start < MAXMS) one(); else Speed.finish(mbps()); };
+        x.onerror = x.ontimeout = function () { if (Speed.running) Speed.finish(mbps(), true); };
+        x.send();
+      }
+      one();
+      Speed.t = setInterval(function () { if (Speed.running && start && Date.now() - start >= MAXMS + 1500) Speed.finish(mbps()); else if (Speed.running && !start && Date.now() - t0 > 12000) Speed.finish(0, true); }, 500);
+      var t0 = Date.now();
+    },
+    key: function (k) { if (k === 'back') Speed.close(); else if (k === 'ok' && !Speed.running) Speed.run(); }
+  };
+
+  /* -------------------------------------------------------------------- quran */
+  // Recitations come from mp3quran.net (reciter list + audio servers). The built-in list below is
+  // the default set and the offline fallback; the phone panel can change which reciters show.
+  var Q_DEFAULT = [{"id":118,"name":"محمود خليل الحصري","m":[[118,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/mahmoud-husary/r1/",0],[119,"حفص عن عاصم - المصحف المجود","https://cdn.mp3quran.net/audio/mahmoud-husary/r2/",0],[120,"ورش عن نافع - مرتل","https://cdn.mp3quran.net/audio/mahmoud-husary/r3/",0],[270,"قالون عن نافع - مرتل","https://cdn.mp3quran.net/audio/mahmoud-husary/r5/",0],[269,"الدوري عن أبي عمرو - مرتل","https://cdn.mp3quran.net/audio/mahmoud-husary/r4/",0]]},{"id":51,"name":"عبدالباسط عبدالصمد","m":[[53,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/abdulbasit-abdulsamad/r3/",0],[51,"حفص عن عاصم - المصحف المجود","https://cdn.mp3quran.net/audio/abdulbasit-abdulsamad/r1/",0],[52,"ورش عن نافع - مرتل","https://cdn.mp3quran.net/audio/abdulbasit-abdulsamad/r2/",0]]},{"id":112,"name":"محمد صديق المنشاوي","m":[[112,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/muhammad-minshawi/r1/",0],[113,"حفص عن عاصم - المصحف المجود","https://cdn.mp3quran.net/audio/muhammad-minshawi/r2/",0],[114,"حفص عن عاصم - المصحف المعلم","https://cdn.mp3quran.net/audio/muhammad-minshawi/r3/",0],[10924,"حفص عن عاصم - تسجيل عام 1387 هـ - 1967م","https://cdn.mp3quran.net/audio/muhammad-minshawi/r4/","1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17,18,19,20,21,22,25,26,27,28,29,30,31,32,33,34,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114"]]},{"id":125,"name":"مصطفى إسماعيل","m":[[125,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/mustafa-ismail/r1/",0],[288,"حفص عن عاصم - المصحف المجود","https://cdn.mp3quran.net/audio/mustafa-ismail/r2/",0]]},{"id":121,"name":"محمود علي البنا","m":[[121,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/mahmoud-banna/r1/",0],[122,"حفص عن عاصم - المصحف المجود","https://cdn.mp3quran.net/audio/mahmoud-banna/r2/",0]]},{"id":106,"name":"محمد الطبلاوي","m":[[106,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/muhammad-tablawi/r1/",0],[10912,"حفص عن عاصم - المصحف المجود","https://cdn.mp3quran.net/audio/muhammad-tablawi/r2/",0]]},{"id":241,"name":"محمد رفعت","m":[[241,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/muhammad-refaat/r1/","1,10,11,12,17,18,19,20,48,54,55,56,69,72,73,75,76,77,78,79,81,82,83,85,86,87,88,89,96,98,100"]]},{"id":9,"name":"أحمد نعينع","m":[[9,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/ahmad-naina/r1/",0]]},{"id":123,"name":"مشاري العفاسي","m":[[123,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/mishary-alafasy/r1/",0],[124,"الدوري عن الكسائي - مرتل","https://cdn.mp3quran.net/audio/mishary-alafasy/r2/","12,14,25,87,97,99"]]},{"id":102,"name":"ماهر المعيقلي","m":[[102,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/maher-muaiqly/r1/",0],[133,"حفص عن عاصم - المصحف المجود","https://cdn.mp3quran.net/audio/maher-muaiqly/r3/",0],[103,"حفص عن عاصم - المصحف المعلم","https://cdn.mp3quran.net/audio/maher-muaiqly/r2/","1,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114"]]},{"id":54,"name":"عبدالرحمن السديس","m":[[54,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/abdulrahman-sudais/r1/",0]]},{"id":31,"name":"سعود الشريم","m":[[31,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/saud-shuraim/r1/",0]]},{"id":30,"name":"سعد الغامدي","m":[[30,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/saad-ghamdi/r1/",0]]},{"id":92,"name":"ياسر الدوسري","m":[[92,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/yasser-dosari/r1/",0]]},{"id":86,"name":"ناصر القطامي","m":[[86,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/nasser-qatami/r1/",0]]},{"id":253,"name":"إسلام صبحي","m":[[253,"حفص عن عاصم - مرتل","https://cdn.mp3quran.net/audio/islam-sobhi/r1/","1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,38,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114"]]}];
+  var Q_RADIO = {"118":"https://backup.qurango.net/radio/mahmoud_khalil_alhussary","51":"https://backup.qurango.net/radio/abdulbasit_abdulsamad","112":"https://backup.qurango.net/radio/mohammed_siddiq_alminshawi","125":"https://backup.qurango.net/radio/mustafa_ismail","121":"https://backup.qurango.net/radio/mahmoud_ali__albanna","106":"https://backup.qurango.net/radio/mohammad_altablaway","9":"https://backup.qurango.net/radio/ahmad_nauina","123":"https://backup.qurango.net/radio/mishary_alafasi","102":"https://backup.qurango.net/radio/maher","54":"https://backup.qurango.net/radio/abdulrahman_alsudaes","31":"https://backup.qurango.net/radio/saud_alshuraim","30":"https://backup.qurango.net/radio/saad_alghamdi","92":"https://backup.qurango.net/radio/yasser_aldosari","86":"https://backup.qurango.net/radio/nasser_alqatami"};
+  var SUWAR = ["الفاتحة","البقرة","آل عمران","النساء","المائدة","الأنعام","الأعراف","الأنفال","التوبة","يونس","هود","يوسف","الرعد","إبراهيم","الحجر","النحل","الإسراء","الكهف","مريم","طه","الأنبياء","الحج","المؤمنون","النور","الفرقان","الشعراء","النمل","القصص","العنكبوت","الروم","لقمان","السجدة","الأحزاب","سبأ","فاطر","يس","الصافات","ص","الزمر","غافر","فصلت","الشورى","الزخرف","الدّخان","الجاثية","الأحقاف","محمد","الفتح","الحجرات","ق","الذاريات","الطور","النجم","القمر","الرحمن","الواقعة","الحديد","المجادلة","الحشر","الممتحنة","الصف","الجمعة","المنافقون","التغابن","الطلاق","التحريم","الملك","القلم","الحاقة","المعارج","نوح","الجن","المزمل","المدثر","القيامة","الإنسان","المرسلات","النبأ","النازعات","عبس","التكوير","الإنفطار","المطففين","الإنشقاق","البروج","الطارق","الأعلى","الغاشية","الفجر","البلد","الشمس","الليل","الضحى","الشرح","التين","العلق","القدر","البينة","الزلزلة","العاديات","القارعة","التكاثر","العصر","الهمزة","الفيل","قريش","الماعون","الكوثر","الكافرون","النصر","المسد","الإخلاص","الفلق","الناس"];
+  var Q_LIVE = [
+    { name: 'إذاعة القرآن الكريم من القاهرة', url: 'https://stream.radiojar.com/8s5u5tpdtwzuv' },
+    { name: 'إذاعة القرآن الكريم - السعودية', url: 'https://stream.radiojar.com/0tpy1h0kxtzuv' },
+    { name: 'تفسير القرآن الكريم', url: 'https://backup.qurango.net/radio/tafseer' },
+    { name: 'أذكار الصباح', url: 'https://backup.qurango.net/radio/athkar_sabah' },
+    { name: 'أذكار المساء', url: 'https://backup.qurango.net/radio/athkar_masa' }
+  ];
+  var Q = { api: null, audio: null, cur: null, rec: null, mo: null };
+  function pad3(n) { return (n < 10 ? '00' : n < 100 ? '0' : '') + n; }
+  function qChosenIds() {
+    var a = asArray((S.cfg.settings || {}).quran).map(function (x) { return +(x && x.id ? x.id : x); }).filter(function (x) { return x > 0; });
+    return a.length ? a : Q_DEFAULT.map(function (r) { return r.id; });
+  }
+  function qLoad() {
+    var ids = qChosenIds(), sig = ids.join(','), c = store.get('qapi', null);
+    if (c && c.sig === sig && Date.now() - c.at < 7 * 864e5) { Q.api = c.d; return Promise.resolve(); }
+    if (MOCK) { Q.api = {}; return Promise.resolve(); }
+    return Promise.all([
+      http('GET', 'https://www.mp3quran.net/api/v3/reciters?language=ar', undefined, 25000),
+      http('GET', 'https://www.mp3quran.net/api/v3/radios?language=ar', undefined, 25000).catch(function () { return null; })
+    ]).then(function (r) {
+      var d = {}, radios = asArray(r[1] && r[1].radios);
+      each(asArray(r[0] && r[0].reciters), function (x) {
+        if (ids.indexOf(x.id) < 0) return;
+        var ms = asArray(x.moshaf).slice().sort(function (a, b) { function w(m) { return m.moshaf_type === 11 ? 0 : m.moshaf_type === 12 ? 1 : 2 + m.moshaf_type / 1000; } return w(a) - w(b); });
+        var rad = '';
+        each(radios, function (ra) { if (String(ra.name).trim() === String(x.name).trim() && (!rad || ra.url.length < rad.length)) rad = ra.url; });
+        d[x.id] = { id: x.id, name: x.name, radio: rad, m: ms.map(function (m) { return [m.id, m.name, m.server, m.surah_total < 114 ? m.surah_list : 0]; }) };
+      });
+      Q.api = d; store.set('qapi', { at: Date.now(), sig: sig, d: d });
+    }).catch(function () { Q.api = (c && c.d) || {}; });
+  }
+  function qReciters() {
+    var out = [];
+    each(qChosenIds(), function (id) {
+      var r = Q.api && Q.api[id];
+      if (!r) each(Q_DEFAULT, function (x) { if (x.id === id) r = { id: x.id, name: x.name, m: x.m, radio: Q_RADIO[id] || '' }; });
+      if (r && r.m && r.m.length) out.push(r);
+    });
+    return out;
+  }
+  function moLabel(m) { return String(m[1]).replace(/^حفص عن عاصم\s*-\s*/, '').replace(/^المصحف\s+/, ''); }
+  function moList(m) { if (!m[3]) { var a = []; for (var i = 1; i <= 114; i++) a.push(i); return a; } return String(m[3]).split(',').map(function (x) { return parseInt(x, 10); }).filter(function (x) { return x >= 1 && x <= 114; }); }
+
+  function qAudio() {
+    if (Q.audio) return Q.audio;
+    var a = Q.audio = new Audio(); a.preload = 'auto';
+    a.addEventListener('ended', function () { qNext(1, true); });
+    a.addEventListener('timeupdate', qDrawNp); a.addEventListener('playing', qDrawNp); a.addEventListener('pause', qDrawNp);
+    a.addEventListener('error', function () { if (!Q.cur || MOCK) return; toast('التلاوة دي مش راضية تشتغل دلوقتي، جرّبوا غيرها'); });
+    return a;
+  }
+  function qStart(url) {
+    try { Player.stop(); } catch (e) { }
+    var a = qAudio();
+    if (!MOCK) { a.src = url; var p = a.play(); if (p && p.catch) p.catch(function () { }); }
+    show($('np'), cur && !Screens[cur].video); qDrawNp(); qMark(); Status.soon();
+  }
+  function qPlay(rec, mo, idx) {
+    var list = moList(mo), n = list[idx]; if (!n) return;
+    Q.cur = { rec: rec, mo: mo, idx: idx, list: list, n: n, title: 'سورة ' + SUWAR[n - 1], sub: rec.name + ' · ' + moLabel(mo) };
+    qStart(mo[2] + pad3(n) + '.mp3');
+  }
+  function qRadio(name, url, sub) { Q.cur = { radio: true, title: name, sub: sub || 'بث مباشر' }; qStart(url); }
+  function qNext(d, auto) {
+    if (!Q.cur || Q.cur.radio) return;
+    var i = Q.cur.idx + d;
+    if (i < 0 || i >= Q.cur.list.length) { if (auto) qStop(); return; }
+    qPlay(Q.cur.rec, Q.cur.mo, i);
+  }
+  function qToggle() { var a = qAudio(); if (MOCK) return; if (a.paused) { var p = a.play(); if (p && p.catch) p.catch(function () { }); } else a.pause(); }
+  function qStop() {
+    if (Q.audio) { try { Q.audio.pause(); Q.audio.removeAttribute('src'); Q.audio.load(); } catch (e) { } }
+    Q.cur = null; if ($('np')) show($('np'), false); qMark();
+  }
+  function qDrawNp() {
+    if (!Q.cur) return;
+    var a = Q.audio, d = a && isFinite(a.duration) ? a.duration : 0, c = a ? a.currentTime || 0 : 0;
+    $('np-t').textContent = (a && a.paused && !MOCK ? '❚❚  ' : '') + Q.cur.title; $('np-s').textContent = Q.cur.sub;
+    $('np-f').style.width = (d ? clamp(c / d * 100, 0, 100) : (Q.cur.radio ? 100 : 0)) + '%';
+    $('np-time').textContent = Q.cur.radio ? 'مباشر' : (d ? fmtDur(c) + ' / ' + fmtDur(d) : '');
+  }
+  function qMark() {
+    var g = $('r-grid'); if (!g) return;
+    each(g.children, function (e) { e.classList.toggle('on', !!(Q.cur && !Q.cur.radio && Q.rec && Q.cur.rec.id === Q.rec.id && Q.cur.mo[0] === Q.mo[0] && e._n === Q.cur.n)); });
+  }
+
+  Screens.quran = {
+    bar: true,
+    enter: function (arg, prev) {
+      var scr = this, rows = $('q-rows');
+      function build() {
+        rows.innerHTML = ''; resetScroll($('s-quran'));
+        var recs = qReciters();
+        rows.appendChild(rowEl('القرّاء', recs.length + ' قارئ', recs.map(function (r, i) {
+          var e = el('div', 'qc f', '<span class="qa">' + (i + 1) + '</span><b>' + esc(r.name) + '</b><small>' + esc(r.m.slice(0, 2).map(moLabel).join(' · ')) + '</small>');
+          e.style.background = artBg(r.id + 2, 150);
+          e._ok = function () { scr._focusId = r.id; go('reciter', r); };
+          e._rid = r.id; return e;
+        })));
+        rows.appendChild(rowEl('إذاعات مباشرة', 'بث ٢٤ ساعة', Q_LIVE.map(function (x, i) {
+          var e = el('div', 'qc radio f', '<span class="qa">◉</span><b>' + esc(x.name) + '</b><small>بث مباشر</small>');
+          e.style.background = artBg(i + 11, 150);
+          e._ok = function () { qRadio(x.name, x.url); };
+          return e;
+        })));
+        var first = null;
+        each(rows.querySelectorAll('.qc'), function (e) { if (e._rid === scr._focusId) first = e; });
+        F.set(first || rows.querySelector('.f'));
+      }
+      if (prev === 'reciter' && rows.children.length) { var back = null; each(rows.querySelectorAll('.qc'), function (e) { if (e._rid === scr._focusId) back = e; }); if (back) { F.set(back, true); return; } }
+      build();
+      if (!Q.api) qLoad().then(function () { if (cur === 'quran') build(); });
+    },
+    back: function () { go('home'); }
+  };
+  Screens.reciter = {
+    enter: function (rec) {
+      Q.rec = rec; $('r-name').textContent = rec.name;
+      var ctas = $('r-ctas'); ctas.innerHTML = '';
+      var b1 = el('span', 'btn f', '<span class="tri"></span>تشغيل المصحف كامل'); b1._ok = function () { qPlay(rec, Q.mo, 0); }; ctas.appendChild(b1);
+      if (rec.radio) { var b2 = el('span', 'btn f', 'بث متواصل ٢٤ ساعة'); b2._ok = function () { qRadio(rec.name, rec.radio, 'بث متواصل'); }; ctas.appendChild(b2); }
+      var box = $('r-moshaf'); box.innerHTML = '';
+      each(rec.m, function (m) {
+        var p = el('span', 'f', esc(moLabel(m))); p._m = m;
+        p._focus = function () { if (Q.mo !== m) renderSurahs(rec, m); };
+        p._ok = function () { var f = $('r-grid').firstChild; if (f) F.set(f); };
+        box.appendChild(p);
+      });
+      show(box, rec.m.length > 1);
+      var start = Q.cur && !Q.cur.radio && Q.cur.rec.id === rec.id ? Q.cur.mo : rec.m[0];
+      each(rec.m, function (m) { if (m[0] === start[0]) start = m; });
+      renderSurahs(rec, start);
+      F.set(b1, true);
+    },
+    back: function () { go('quran'); }
+  };
+  function renderSurahs(rec, m) {
+    Q.mo = m;
+    each($('r-moshaf').children, function (p) { p.classList.toggle('act', p._m === m); });
+    var g = $('r-grid'); g.innerHTML = ''; g._mode = 'grid'; g._y = 0; g.style.webkitTransform = g.style.transform = '';
+    var list = moList(m), frag = document.createDocumentFragment();
+    each(list, function (n, idx) {
+      var e = el('div', 'su f', '<b>' + n + '</b><span>' + esc(SUWAR[n - 1]) + '</span>'); e._n = n;
+      e._ok = function () { if (Q.cur && !Q.cur.radio && Q.cur.rec.id === rec.id && Q.cur.mo[0] === m[0] && Q.cur.n === n) qToggle(); else qPlay(rec, m, idx); };
+      frag.appendChild(e);
+    });
+    g.appendChild(frag); qMark();
+  }
 
   /* ------------------------------------------------------------------ keys */
   var KEYS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'ok', 10009: 'back', 8: 'back', 27: 'back', 427: 'chup', 428: 'chdown', 33: 'chup', 34: 'chdown', 403: 'red', 404: 'green', 405: 'yellow', 406: 'blue', 457: 'info', 73: 'info', 10252: 'playpause', 415: 'play', 19: 'pause', 413: 'stop', 417: 'ff', 412: 'rw', 10190: 'prech' };
@@ -1079,7 +1320,14 @@
     e.preventDefault();
     if (!cur) return;
     if (Pop.open) { Pop.key(k); return; }
+    if (Speed.open) { Speed.key(k); return; }
     var sc = Screens[cur];
+    if (Q.cur && !sc.video) {
+      if (k === 'playpause' || k === 'play' || k === 'pause') { qToggle(); return; }
+      if (k === 'ff') { qNext(1); return; }
+      if (k === 'rw') { qNext(-1); return; }
+      if (k === 'stop') { qStop(); return; }
+    }
     if (sc.key && sc.key(k)) return;
     if (k === 'left' || k === 'right' || k === 'up' || k === 'down') F.move(k);
     else if (k === 'ok') { if (F.el && F.el._ok) F.el._ok(); }
@@ -1096,8 +1344,11 @@
     var app = $('app') || document.body.appendChild(el('div'));
     app.id = 'app';
     app.innerHTML = [
-      '<div id="topbar" class="hidden"><div class="brand"><div class="mark">A</div><b>Ahmed <i>TV</i></b></div>',
-      '<div class="nav" id="nav"><span class="f" data-go="home" id="nav-home">الرئيسية</span><span class="f" data-go="live" id="nav-live">البث المباشر</span><span class="f" data-go="movies" id="nav-movie">الأفلام</span><span class="f" data-go="series" id="nav-series">المسلسلات</span></div>',
+      '<div id="topbar" class="hidden"><div class="brand"><div class="mark">M</div><b>Mohab <i>TV</i></b><span class="pchip" id="pchip"></span></div>',
+      '<div class="nav" id="nav"><span class="f" data-go="home" id="nav-home">الرئيسية</span><span class="f" data-go="live" id="nav-live">البث المباشر</span><span class="f" data-go="movies" id="nav-movie">الأفلام</span><span class="f" data-go="series" id="nav-series">المسلسلات</span><span class="f" data-go="quran" id="nav-quran">القرآن الكريم</span></div>',
+
+      '<section class="screen" id="s-who"><div class="fill amb"></div><div class="fill grain"></div><div class="who"><div class="wbrand"><div class="mark">M</div><b>Mohab <i>TV</i></b></div><h2>مين اللي هيتفرج؟</h2>',
+      '<div class="wrow"><div class="wp f" id="who-ahmed"><span class="av">أ</span><b>أحمد جمال</b></div><div class="wp f" id="who-mohab"><span class="av">م</span><b>مهاب</b><small>قريبًا</small></div></div></div></section>',
       '<div class="clock"><div class="t" id="clk"></div><div class="d" id="dt"></div></div></div>',
 
       '<section class="screen" id="s-open"><div class="fill amb"></div><div class="fill grain"></div><div class="openmsg"><div class="k">رسالة النهارده</div><h2 id="om-text"></h2><div class="sig">مهاب</div><div><span class="go f" id="om-go">OK للدخول</span></div></div></section>',
@@ -1105,7 +1356,7 @@
       '<section class="screen" id="s-home"><div class="fill amb"></div><div class="fill grain"></div><div class="fill deco" id="h-deco"></div>',
       '<div class="subs hidden" id="h-subs"></div><div class="art" id="h-art"></div>',
       '<div class="hero"><div class="eyebrow" id="h-eye"></div><h1 class="welcome" id="h-title"></h1><div class="sub" id="h-sub"></div>',
-      '<div class="ctas"><span class="btn f" id="h-resume"><span class="tri"></span>كمّل المشاهدة<small id="h-last"></small></span><span class="btn f" id="h-all">كل القنوات</span></div></div>',
+      '<div class="ctas"><span class="btn f" id="h-resume"><span class="tri"></span>كمّل المشاهدة<small id="h-last"></small></span><span class="btn f" id="h-all">كل القنوات</span><span class="btn f" id="h-speed">سرعة النت<small id="h-spd"></small></span></div></div>',
       '<div class="msg hidden" id="h-msg"><div class="h"><b>رسالة من مهاب</b><span>النهارده</span></div><p id="h-msgt"></p></div><div class="notice hidden" id="h-notice"></div>',
       '<div class="vwrap" style="top:690px;height:390px"><div class="vscroll" id="h-rows"></div></div></section>',
 
@@ -1126,13 +1377,27 @@
       '<section class="screen" id="s-player"><div class="spin hidden" id="p-spin"></div><div class="vstate hidden" id="p-state"></div><div class="seekmsg hidden" id="p-seek"></div>',
       '<div class="vctl" id="p-ctl"><h3 id="p-title"></h3><div class="s" id="p-sub"></div><div class="vbar"><i id="p-fill"></i><b id="p-knob"></b></div><div class="vtimes"><span id="p-cur"></span><span id="p-dur"></span></div></div></section>',
 
+      '<section class="screen" id="s-quran"><div class="fill amb"></div><div class="fill grain"></div><div class="qhead"><div class="eyebrow">بسم الله الرحمن الرحيم</div><h1>القرآن الكريم</h1></div>',
+      '<div class="vwrap" style="top:330px;height:750px"><div class="vscroll" id="q-rows"></div></div></section>',
+
+      '<section class="screen" id="s-reciter"><div class="fill amb"></div><div class="fill grain"></div><div class="qhead" style="top:60px"><div class="eyebrow">القرآن الكريم</div><h1 id="r-name"></h1><div class="ctas" id="r-ctas"></div><div class="seasons" id="r-moshaf"></div></div>',
+      '<div class="grid" style="top:480px;bottom:120px"><div class="gin vscroll" id="r-grid"></div></div></section>',
+
+      '<div id="np" class="hidden"><div class="npi"><b id="np-t"></b><span id="np-s"></span></div><div class="npbar"><i id="np-f"></i></div><span class="npt" id="np-time"></span><span class="nph">⏯ إيقاف وتشغيل</span></div>',
+
+      '<div id="speed" class="hidden"><div class="box"><div class="k">قياس سرعة النت</div><div class="spd"><b id="sp-num">0</b><span>ميجابت في الثانية</span></div><div class="spbar"><i id="sp-bar"></i></div><p id="sp-msg"></p><div class="sph" id="sp-hint"></div></div></div>',
+
       '<div id="pop" class="hidden"><div class="box"><div class="k" id="pop-k"></div><h5 id="pop-h"></h5><p id="pop-p"></p><div class="acts" id="pop-acts"></div></div></div>',
       '<div id="toast" class="hidden"></div>',
-      '<div id="boot"><div class="mark">A</div><p id="boot-msg">Ahmed TV</p></div>'
+      '<div id="boot"><div class="mark">M</div><p id="boot-msg">Mohab TV</p></div>'
     ].join('');
     each(document.querySelectorAll('#nav .f'), function (n) { n._ok = function () { go(n.getAttribute('data-go')); }; });
     $('h-resume')._ok = function () { go('live'); };
     $('h-all')._ok = function () { go('live', { openList: true }); };
+    $('h-speed')._ok = function () { Speed.show(); };
+    $('who-ahmed')._ok = function () { selectProfile('ahmed'); };
+    // Mohab's section is not built yet: show a notice and stay on the picker
+    $('who-mohab')._ok = function () { Pop.show({ kicker: 'مهاب', title: 'قريبًا', text: 'القسم ده لسه بيتجهّز. اختاروا أحمد جمال.', buttons: [{ label: 'تمام' }] }); };
     $('om-go')._ok = function () { go('home'); };
   }
   function vodHtml(name, P) {
@@ -1186,9 +1451,8 @@
     }).then(function () {
       buildLists();
       var b = $('boot'); if (b) b.parentNode.removeChild(b);
-      var t = todaysMessage();
-      if (t && store.get('seenMsg', '') !== iso(new Date()) + '|' + t) go('open'); else go('home');
-      maybeShowUrgent();
+      // the user picker shows only on the very first launch; later it is reached from Back on the home screen
+      if (store.get('profileSet', 0)) selectProfile(S.profile); else go('who');
       setInterval(poll, POLL_MS);
       setInterval(Status.send, 60000); Status.send();
       setTimeout(function () { if (!MOCK && X.acc) { loadVod('movie').catch(function () { }); setTimeout(function () { loadVod('series').catch(function () { }); }, 4000); } else if (MOCK) { mockVod(); if (cur === 'home') Home.renderRows(); } }, 3000);
@@ -1200,6 +1464,7 @@
         hiddenAt = Date.now();
         if (cur === 'player') savePos(false);
         Player.stop();
+        if (Q.audio && Q.cur) { try { Q.audio.pause(); } catch (e) { } qDrawNp(); }
       } else {
         if (Date.now() - hiddenAt > 60 * 60 * 1000) { location.reload(); return; }
         poll();
@@ -1209,6 +1474,6 @@
     });
   }
 
-  window.AhmedTV = { version: VERSION, go: function (n, a) { go(n, a); }, state: S };
+  window.MohabTV = window.AhmedTV = { version: VERSION, go: function (n, a) { go(n, a); }, state: S };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

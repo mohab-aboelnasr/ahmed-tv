@@ -1,4 +1,4 @@
-/* Ahmed TV control panel: reads/writes the TV's settings in Firebase Realtime Database (REST). */
+/* Mohab TV control panel: reads/writes the TV's settings in Firebase Realtime Database (REST). */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -93,6 +93,7 @@
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === name));
     ls.set('tab', name);
     if (name === 'chs') loadCatalog();
+    if (name === 'quran') loadReciters();
   }
   document.querySelectorAll('#tabs button').forEach((b) => { b.onclick = () => openTab(b.dataset.tab); });
 
@@ -210,6 +211,41 @@
   $('cat-q').oninput = renderCatalog;
   $('cat-filter').onchange = renderCatalog;
 
+  // ---------- quran reciters (list comes from mp3quran.net; the TV stores only the chosen ids)
+  const Q_DEFAULT = [[118,'محمود خليل الحصري'],[51,'عبدالباسط عبدالصمد'],[112,'محمد صديق المنشاوي'],[125,'مصطفى إسماعيل'],[121,'محمود علي البنا'],[106,'محمد الطبلاوي'],[241,'محمد رفعت'],[9,'أحمد نعينع'],[123,'مشاري العفاسي'],[102,'ماهر المعيقلي'],[54,'عبدالرحمن السديس'],[31,'سعود الشريم'],[30,'سعد الغامدي'],[92,'ياسر الدوسري'],[86,'ناصر القطامي'],[253,'إسلام صبحي']].map((x) => ({ id: x[0], name: x[1] }));
+  let qChosen = [], qAll = null;
+  function renderQuran() {
+    const box = $('q-list');
+    box.innerHTML = qChosen.map((r, i) => '<div class="item" data-i="' + i + '"><span class="n">' + (i + 1) + '</span><span class="t">' + esc(r.name) + '</span><button class="icon up" type="button" aria-label="لفوق"' + (i ? '' : ' disabled') + '>▲</button><button class="icon dn" type="button" aria-label="لتحت"' + (i < qChosen.length - 1 ? '' : ' disabled') + '>▼</button><button class="icon del" type="button" aria-label="شيل">✕</button></div>').join('') || '<p class="empty">القائمة فاضية.</p>';
+    box.querySelectorAll('.item').forEach((row) => {
+      const i = +row.dataset.i;
+      row.querySelector('.up').onclick = () => { if (i > 0) { [qChosen[i - 1], qChosen[i]] = [qChosen[i], qChosen[i - 1]]; commitQuran(); } };
+      row.querySelector('.dn').onclick = () => { if (i < qChosen.length - 1) { [qChosen[i + 1], qChosen[i]] = [qChosen[i], qChosen[i + 1]]; commitQuran(); } };
+      row.querySelector('.del').onclick = () => { if (qChosen.length > 1) { qChosen.splice(i, 1); commitQuran(); } else toast('لازم يفضل قارئ واحد على الأقل', true); };
+    });
+    renderAllReciters();
+  }
+  const commitQuran = (() => { let t; return () => { renderQuran(); clearTimeout(t); t = setTimeout(() => saveSettings({ quran: qChosen }), 600); }; })();
+  async function loadReciters() {
+    if (qAll) return;
+    try {
+      const r = await (await fetch('https://www.mp3quran.net/api/v3/reciters?language=ar')).json();
+      qAll = (r.reciters || []).map((x) => ({ id: x.id, name: x.name })).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      $('q-note').textContent = qAll.length + ' قارئ متاحين. دوّر بالاسم ودوس + عشان تضيف.';
+    } catch (e) { qAll = null; $('q-note').textContent = 'مقدرتش أجيب قائمة القرّاء دلوقتي. جرّب تاني كمان شوية.'; }
+    renderAllReciters();
+  }
+  function renderAllReciters() {
+    const box = $('q-all'); if (!qAll) { box.innerHTML = ''; return; }
+    const q = $('q-q').value.trim(), have = new Set(qChosen.map((r) => +r.id));
+    const all = qAll.filter((r) => !q || r.name.includes(q)), shown = all.slice(0, 60);
+    box.innerHTML = shown.map((r) => '<div class="item"><span class="t">' + esc(r.name) + '</span><button class="icon add" type="button" data-id="' + r.id + '" aria-label="ضيف"' + (have.has(r.id) ? ' disabled' : '') + '>' + (have.has(r.id) ? '✓' : '+') + '</button></div>').join('') +
+      (all.length > shown.length ? '<p class="empty">ظاهر ' + shown.length + ' من ' + all.length + '. دوّر بالاسم.</p>' : '') + (!all.length ? '<p class="empty">مفيش نتايج.</p>' : '');
+    box.querySelectorAll('.add').forEach((b) => { b.onclick = () => { const r = qAll.find((x) => x.id === +b.dataset.id); if (r && !have.has(r.id)) { qChosen.push({ id: r.id, name: r.name }); commitQuran(); toast('اتضاف ' + r.name); } }; });
+  }
+  $('q-q').oninput = renderAllReciters;
+  $('q-reset').onclick = () => { qChosen = Q_DEFAULT.map((r) => Object.assign({}, r)); commitQuran(); };
+
   // ---------- look
   let palette = 'gold';
   function renderLook() {
@@ -257,7 +293,9 @@
     $('m-date').value = iso(new Date());
     people = asArray(doc.people).map((p) => Object.assign({ name: '', date: '', text: '' }, p));
     favs = asArray(doc.favorites).map((f) => ({ id: +f.id, name: f.name }));
-    renderMessages(); renderPeople(); renderFavs(); renderLook(); renderAccount();
+    const sq = asArray(doc.settings && doc.settings.quran).filter((r) => r && r.id);
+    qChosen = (sq.length ? sq : Q_DEFAULT).map((r) => ({ id: +r.id, name: r.name }));
+    renderMessages(); renderPeople(); renderFavs(); renderLook(); renderAccount(); renderQuran();
     openTab(ls.get('tab') || 'home');
   }
   setInterval(() => { if (KEY && !document.hidden) refresh(false); }, 30000);

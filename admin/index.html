@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#0f1014">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Ahmed TV">
-<title>Ahmed TV · التحكم</title>
+<meta name="apple-mobile-web-app-title" content="Mohab TV">
+<title>Mohab TV · التحكم</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -17,7 +17,7 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">A</span><b>Ahmed <i>TV</i></b><span class="sep">التحكم</span></div>
+  <div class="brand"><span class="mark">M</span><b>Mohab <i>TV</i></b><span class="sep">التحكم</span></div>
   <span class="sync" id="sync" data-state="idle">…</span>
 </header>
 
@@ -51,6 +51,7 @@
     <button type="button" role="tab" data-tab="msgs">الرسائل</button>
     <button type="button" role="tab" data-tab="bdays">أعياد الميلاد</button>
     <button type="button" role="tab" data-tab="chs">القنوات</button>
+    <button type="button" role="tab" data-tab="quran">القرآن</button>
     <button type="button" role="tab" data-tab="look">الشكل</button>
     <button type="button" role="tab" data-tab="acct">الاشتراك</button>
   </nav>
@@ -129,6 +130,22 @@
     </section>
   </div>
 
+  <!-- quran -->
+  <div class="tab" data-tab="quran">
+    <section class="card">
+      <h2>القرّاء على التلفزيون</h2>
+      <p>دول اللي بيظهروا في قسم القرآن الكريم، بنفس الترتيب. التغييرات بتتحفظ على طول.</p>
+      <div id="q-list" class="list"></div>
+      <button class="btn ghost small" id="q-reset" type="button">رجّع القائمة الأساسية</button>
+    </section>
+    <section class="card">
+      <h2>ضيف قارئ</h2>
+      <p id="q-note">بنجيب قائمة القرّاء…</p>
+      <input id="q-q" type="search" placeholder="دوّر باسم القارئ" aria-label="دوّر">
+      <div id="q-all" class="list"></div>
+    </section>
+  </div>
+
   <!-- look -->
   <div class="tab" data-tab="look">
     <section class="card">
@@ -194,6 +211,6 @@
 </main>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="admin.js?v=3"></script>
+<script src="admin.js?v=4"></script>
 </body>
 </html>
