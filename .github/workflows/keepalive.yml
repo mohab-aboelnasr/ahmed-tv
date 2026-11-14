@@ -1,0 +1,28 @@
+# Keeps the free Supabase project awake: Supabase pauses a free project after about a week
+# with no activity, which stops the phone control panel from reaching the TV.
+# This writes one tiny row once a day (under a separate dummy key, not the TV's own key).
+# The key below is the project's publishable key, which is meant to be public.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write a heartbeat row
+        env:
+          SUPABASE_URL: https://hgdxrwngoteiyyrfghrq.supabase.co
+          SUPABASE_KEY: sb_publishable_Q0ki5LjrxfvVJGjVlFNElQ_v_pShAq4
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          curl --fail-with-body -sS -X POST "$SUPABASE_URL/rest/v1/rpc/tv_set" \
+            -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" \
+            -d "{\"k\":\"keepalive0keepalive0keepalive\",\"p\":\"status\",\"v\":{\"heartbeat\":\"$NOW\"}}"
+          echo "heartbeat written at $NOW"
