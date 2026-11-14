@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -101,7 +101,7 @@
   /* ------------------------------------------------------------------ state */
   var S = {
     cfg: store.get('cfg', {}) || {},
-    user: null, liveExt: 'ts', accountError: '',
+    user: null, liveExt: 'ts', accountError: '', server: 'unknown',
     streams: [], byId: {}, cats: [], lists: [],
     li: 0, ci: 0, prev: null,
     movies: null, series: null,
@@ -498,13 +498,13 @@
       else if (!X.acc) note = 'لسه مفيش اشتراك متسجّل. مهاب هيضيفه من الموبايل وهيشتغل لوحده.';
       else if (S.accountError) note = S.accountError;
       n.textContent = note; show(n, !!note && !m);
-      var u = S.user, sb = $('h-subs');
+      var u = S.user, sb = $('h-subs'), lines = '';
       if (u && u.exp) {
         var d = new Date(u.exp * 1000), left = Math.ceil((d - new Date()) / 864e5);
-        sb.innerHTML = '<span class="dot" style="background:' + (left > 15 ? '#4ade80' : (left > 0 ? '#facc15' : '#ef4444')) + '"></span>الاشتراك ساري حتى<b>' + esc(fmtLongDate(d)) + '</b>· ' + (left > 0 ? 'باقي ' + left + ' يوم' : 'الاشتراك خلص');
-        show(sb, true);
-      } else if (u && u.status) { sb.innerHTML = '<span class="dot"></span>الاشتراك: <b>' + esc(u.status === 'Active' ? 'شغّال' : u.status) + '</b>'; show(sb, true); }
-      else show(sb, false);
+        lines += '<div class="ln"><span class="dot" style="background:' + (left > 15 ? '#4ade80' : (left > 0 ? '#facc15' : '#ef4444')) + '"></span>الاشتراك ساري حتى<b>' + esc(fmtLongDate(d)) + '</b>· ' + (left > 0 ? 'باقي ' + left + ' يوم' : 'الاشتراك خلص') + '</div>';
+      } else if (u && u.status) lines += '<div class="ln"><span class="dot"></span>الاشتراك: <b>' + esc(u.status === 'Active' ? 'شغّال' : u.status) + '</b></div>';
+      if (X.acc) lines += '<div class="ln"><span class="dot" style="background:' + (S.server === 'up' ? '#4ade80' : S.server === 'down' ? '#ef4444' : '#9a968e') + '"></span>السيرفر:<b>' + (S.server === 'up' ? 'شغّال' : S.server === 'down' ? 'واقع دلوقتي' : 'بنتأكد…') + '</b></div>';
+      sb.innerHTML = lines; show(sb, !!lines);
       var last = S.byId[(store.get(pkey('last'), {}) || {}).id];
       $('h-last').textContent = last ? '· ' + String(last.name).slice(0, 18) : '';
       var sp = store.get('speed', null);
@@ -1017,13 +1017,27 @@
     return X.call('').then(function (r) {
       var u = r && r.user_info;
       if (!u || u.auth === 0 || u.auth === '0') { S.accountError = 'بيانات الاشتراك مش صح. مهاب هيراجعها.'; S.user = null; return false; }
-      S.accountError = '';
+      S.accountError = ''; S.server = 'up';
       S.user = { exp: parseInt(u.exp_date, 10) || 0, status: u.status, max: u.max_connections };
       var fm = u.allowed_output_formats || [];
       S.liveExt = fm.indexOf('ts') >= 0 || !fm.length ? 'ts' : (fm.indexOf('m3u8') >= 0 ? 'm3u8' : fm[0]);
       store.set('user', S.user);
       return true;
-    }).catch(function () { S.accountError = 'السيرفر مش بيرد دلوقتي. هنحاول تاني لوحدنا.'; S.user = store.get('user', null); return !!S.user; });
+    }).catch(function () { S.server = 'down'; S.accountError = 'السيرفر مش بيرد دلوقتي. هنحاول تاني لوحدنا.'; S.user = store.get('user', null); return !!S.user; });
+  }
+  // is the subscription server answering? checked every 2 minutes and shown on the home screen
+  function checkServer() {
+    if (!X.acc || MOCK) { if (MOCK) S.server = 'up'; return; }
+    var was = S.server;
+    http('GET', X.base(), undefined, 12000).then(function (r) {
+      S.server = 'up';
+      var u = r && r.user_info;
+      if (u && u.auth !== 0 && u.auth !== '0') { S.user = { exp: parseInt(u.exp_date, 10) || 0, status: u.status, max: u.max_connections }; store.set('user', S.user); if (/السيرفر/.test(S.accountError)) S.accountError = ''; }
+      if (was === 'down' && !S.streams.length) loadLive().catch(function () { });
+    }).catch(function () { S.server = 'down'; }).then(function () {
+      if (cur === 'home') Home.renderInfo();
+      if (was !== S.server) { Status.soon(); if (was === 'up' && S.server === 'down') toast('السيرفر واقع دلوقتي. القنوات ممكن ماتشتغلش لحد ما يرجع.'); else if (was === 'down' && S.server === 'up') toast('السيرفر رجع يشتغل'); }
+    });
   }
   function loadLive() {
     var cached = store.get('live', null);
@@ -1092,7 +1106,7 @@
       var c = cur === 'live' && S.lists[S.li] && S.lists[S.li].items[S.ci];
       Remote.patch('status', {
         lastSeen: { '.sv': 'timestamp' }, version: VERSION, shell: CFG.shellVersion || '', screen: cur || '',
-        profile: S.profile,
+        profile: S.profile, server: S.server,
         watching: Q.cur ? 'قرآن: ' + Q.cur.title + ' · ' + Q.cur.sub : cur === 'live' && c ? c.name : (cur === 'player' ? (V.title || '') + (V.sub ? ' · ' + V.sub : '') : ''),
         exp: S.user && S.user.exp ? S.user.exp : null, accountOk: !!S.user && !S.accountError, error: S.accountError || '', channels: S.streams.length
       }).catch(function () { });
@@ -1455,6 +1469,8 @@
       if (store.get('profileSet', 0)) selectProfile(S.profile); else go('who');
       setInterval(poll, POLL_MS);
       setInterval(Status.send, 60000); Status.send();
+      if (MOCK) S.server = 'up';
+      setInterval(checkServer, 120000);
       setTimeout(function () { if (!MOCK && X.acc) { loadVod('movie').catch(function () { }); setTimeout(function () { loadVod('series').catch(function () { }); }, 4000); } else if (MOCK) { mockVod(); if (cur === 'home') Home.renderRows(); } }, 3000);
     });
 
@@ -1467,7 +1483,7 @@
         if (Q.audio && Q.cur) { try { Q.audio.pause(); } catch (e) { } qDrawNp(); }
       } else {
         if (Date.now() - hiddenAt > 60 * 60 * 1000) { location.reload(); return; }
-        poll();
+        poll(); checkServer();
         if (cur === 'live') { var c = S.lists[S.li] && S.lists[S.li].items[S.ci]; if (c) startChannel(c); }
         else if (cur === 'player') { V.start = Player.cur || (V.res && V.res.pos) || 0; Screens.player.enter(V); }
       }

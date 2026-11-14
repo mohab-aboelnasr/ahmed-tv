@@ -111,6 +111,7 @@
     rows.push(['التلفزيون', st.lastSeen ? '<span class="pill ' + (online ? 'ok' : 'warn') + '">' + (online ? 'شغّال' : 'مقفول') + '</span> آخر ظهور ' + ago(st.lastSeen) : '<span class="pill warn">لسه ما اتوصّلش</span>']);
     if (online && st.watching) rows.push(['بيتفرجوا على', esc(st.watching)]);
     if (st.exp) { const d = new Date(st.exp * 1000), left = Math.ceil((d - new Date()) / 864e5); rows.push(['الاشتراك', d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear() + ' <span class="pill ' + (left > 15 ? 'ok' : left > 0 ? 'warn' : 'bad') + '">' + (left > 0 ? 'باقي ' + left + ' يوم' : 'خلص') + '</span>']); }
+    if (st.server && st.server !== 'unknown') rows.push(['السيرفر', st.server === 'up' ? '<span class="pill ok">شغّال</span>' : '<span class="pill bad">واقع</span>' + (online ? '' : ' (آخر مرة التلفزيون كان شغّال)')]);
     if (st.error) rows.push(['مشكلة', '<span class="pill bad">' + esc(st.error) + '</span>']);
     else if (st.lastSeen && doc.account && doc.account.username) rows.push(['الدخول', st.accountOk ? '<span class="pill ok">تمام</span> ' + (st.channels ? st.channels + ' قناة' : '') : '<span class="pill warn">لسه</span>']);
     if (st.version) rows.push(['النسخة', esc(st.version)]);

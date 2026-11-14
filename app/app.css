@@ -66,9 +66,10 @@ img{display:block}
 .welcome.latin em{font-style:italic;color:var(--accent)}
 .sub{font-size:30px;color:var(--muted);margin-top:14px;line-height:1.5}
 .ctas{margin-top:38px;white-space:nowrap}
-.art{position:absolute;top:150px;left:120px;width:560px;height:300px}
+.art{position:absolute;top:196px;left:120px;width:560px;height:262px}
 .art svg{width:100%;height:100%}
-.subs{position:absolute;top:122px;left:88px;font-size:22px;color:var(--muted);display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;z-index:21}
+.subs{position:absolute;top:118px;left:88px;font-size:22px;color:var(--muted);z-index:21}
+.subs .ln{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;margin-bottom:4px}
 .subs .dot{width:12px;height:12px;border-radius:50%;background:#4ade80;margin-left:12px}
 .subs b{color:var(--text);font-weight:500;margin:0 6px}
 .msg{position:absolute;top:470px;left:88px;width:640px;padding:28px 34px;border-radius:24px;background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.03));box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
