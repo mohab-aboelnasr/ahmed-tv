@@ -25,7 +25,7 @@
 <main id="connect" hidden>
   <section class="card">
     <h2>وصّل لوحة التحكم</h2>
-    <p>المرة الأولى بس. حط رابط قاعدة بيانات Firebase ومفتاح التلفزيون، وهيتحفظوا على الموبايل ده.</p>
+    <p>حط رابط Supabase ومفتاحه ومفتاح التلفزيون، ودوس "وصّل". بيتحفظوا على الموبايل ده.</p>
     <label for="c-db">رابط قاعدة البيانات</label>
     <input id="c-db" type="url" dir="ltr" placeholder="https://xxxx.supabase.co">
     <label for="c-anon">مفتاح Supabase (anon / publishable)</label>
@@ -46,6 +46,11 @@
 
 <!-- app -->
 <main id="main" hidden>
+  <section class="card neterr" id="neterr" hidden>
+    <h2>مفيش اتصال بقاعدة البيانات</h2>
+    <p>البيانات اللي تحت ممكن تكون ناقصة. اتأكد من النت ودوس "جرّب تاني". بياناتك محفوظة أونلاين ومش هتضيع.</p>
+    <button class="btn" id="neterr-retry" type="button">جرّب تاني</button>
+  </section>
   <nav class="tabs" id="tabs" role="tablist">
     <button type="button" role="tab" data-tab="home">الرئيسية</button>
     <button type="button" role="tab" data-tab="msgs">الرسائل</button>
@@ -238,6 +243,6 @@
 </main>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="admin.js?v=6"></script>
+<script src="admin.js?v=7"></script>
 </body>
 </html>

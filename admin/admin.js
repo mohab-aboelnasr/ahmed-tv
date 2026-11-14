@@ -15,7 +15,7 @@
     del(k) { try { localStorage.removeItem('atvadmin_' + k); } catch (e) { /* ignore */ } }
   };
 
-  let DB = '', KEY = '', ANON = '', doc = {}, catalog = null;
+  let DB = '', KEY = '', ANON = '', doc = {}, catalog = null, loaded = false;
   const isSupa = () => /supabase\.(co|in)/.test(DB) || !!ANON;
 
   // ---------- connection
@@ -68,11 +68,12 @@
     const db = cleanDb($('c-db').value).replace(/\/rest\/v1.*$/, ''), key = $('c-key').value.trim(), anon = $('c-anon').value.trim();
     if (!/^https:\/\/.+/.test(db)) { showConnect('اكتب رابط قاعدة البيانات كامل، بيبدأ بـ https://'); return; }
     if (/supabase\.(co|in)/.test(db) && !anon) { showConnect('اكتب مفتاح Supabase (anon أو publishable).'); return; }
-    ls.set('anon', anon);
+    ls.set('anon', anon); ls.del('off');
     if (key.length < 24) { showConnect('المفتاح لازم يبقى ٢٤ حرف على الأقل. دوس "مفتاح جديد".'); return; }
     ls.set('db', db); ls.set('key', key); start();
   };
-  $('disconnect').onclick = () => { ls.del('db'); showConnect(); };
+  $('disconnect').onclick = () => { ls.set('off', '1'); showConnect(); };
+  $('neterr-retry').onclick = () => { if (loaded) refresh(true).then((ok) => { $('neterr').hidden = ok; }); else start(); };
 
   async function copy(t, node) {
     try { await navigator.clipboard.writeText(t); toast('اتنسخ'); }
@@ -332,21 +333,27 @@
   async function refresh(manual) {
     try {
       const d = (await getDoc()) || {};
-      doc = d; renderStatus();
+      doc = d; renderStatus(); $('neterr').hidden = true;
       if (manual) toast('اتحدّث');
       return true;
     } catch (e) {
       setSync('err', e.message === 'denied' ? 'مرفوض' : 'مفيش اتصال');
+      $('neterr').hidden = false;
       if (e.message === 'denied') showConnect(isSupa() ? 'Supabase رفض الاتصال. اتأكد إنك شغّلت ملف supabase.sql في SQL Editor، وإن مفتاح Supabase صح.' : 'قاعدة البيانات رفضت الاتصال. اتأكد إنك حطيت القواعد من ملف database.rules.json وإن المفتاح ٢٤ حرف أو أكتر.');
       return false;
     }
   }
   async function start() {
     DB = cleanDb(ls.get('db')); KEY = ls.get('key'); ANON = ls.get('anon');
-    if (!DB || !KEY) { showConnect(); return; }
+    if (!DB || !KEY || ls.get('off')) { showConnect(); return; }
     $('connect').hidden = true; $('main').hidden = false;
     setSync('idle', 'بيحمّل…');
-    if (!(await refresh(false))) return;
+    // show the TV settings code right away: it does not depend on the network
+    $('a-snippet').textContent = snippet(DB, KEY, ANON);
+    openTab(ls.get('tab') || 'home');
+    const ok = await refresh(false);
+    $('neterr').hidden = ok;
+    if (!ok) return;
     $('w-title').value = (doc.settings && doc.settings.title) || '';
     $('w-sub').value = (doc.settings && doc.settings.sub) || '';
     $('m-date').value = iso(new Date());
@@ -356,6 +363,7 @@
     qChosen = (sq.length ? sq : Q_DEFAULT).map((r) => ({ id: +r.id, name: r.name }));
     renderMessages(); renderPeople(); renderFavs(); renderLook(); renderAccount(); renderQuran();
     openTab(ls.get('tab') || 'home');
+    loaded = true;
   }
   setInterval(() => { if (KEY && !document.hidden) refresh(false); }, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && KEY) refresh(false); });

@@ -97,3 +97,6 @@ code{font-size:13px;color:var(--ink)}
 .toast.on{opacity:1}
 .toast.bad{background:#2a1f1f;color:var(--bad)}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}}
+
+.neterr{background:#2a1f1f;margin-bottom:12px}
+.neterr h2{color:var(--bad)}
