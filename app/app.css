@@ -22,7 +22,7 @@ img{display:block}
 
 /* screens */
 .screen{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;display:none}
-.screen.on{display:block;-webkit-animation:fadein .35s ease;animation:fadein .35s ease}
+.screen.on{display:block}
 @-webkit-keyframes fadein{from{opacity:0}to{opacity:1}}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 

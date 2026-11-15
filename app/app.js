@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.3.2';
+  var VERSION = '1.3.3';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -323,10 +323,8 @@
     token: 0, video: null, hls: null, opts: {}, playing: false, dur: 0, cur: 0,
     init: function () {
       if (IS_TV) {
-        var o = document.createElement('object');
-        o.id = 'av'; o.setAttribute('type', 'application/avplayer');
-        o.style.cssText = 'position:absolute;left:0;top:0;width:1920px;height:1080px;z-index:-1';
-        document.body.insertBefore(o, document.body.firstChild);
+        // The Samsung video element is created only when something is first played (see ensureObject):
+        // while it sat in the page from the start, the first real TV showed a black screen over the menus.
       } else {
         var v = document.createElement('video');
         v.id = 'vid'; v.style.cssText = 'position:absolute;left:0;top:0;width:1920px;height:1080px;background:#000;z-index:-1';
@@ -340,12 +338,25 @@
         v.addEventListener('error', function () { Player.emit('error', 'video'); });
       }
     },
+    ensureObject: function () {
+      if (!IS_TV) return;
+      var o = $('av');
+      if (!o) {
+        o = document.createElement('object');
+        o.id = 'av'; o.setAttribute('type', 'application/avplayer');
+        o.style.cssText = 'position:absolute;left:0;top:0;width:1920px;height:1080px;z-index:-1';
+        document.body.insertBefore(o, document.body.firstChild);
+      }
+      o.style.display = 'block';
+    },
+    hideObject: function () { var o = $('av'); if (o) o.style.display = 'none'; },
     emit: function (ev, a) { var f = Player.opts['on' + ev]; if (f) try { f(a); } catch (e) { } },
     play: function (url, opts) {
       qStop();
       Player.stop();
       Player.opts = opts || {}; Player.playing = false; Player.cur = 0; Player.dur = 0;
       var tk = ++Player.token;
+      Player.ensureObject();
       document.body.classList.add('video');
       Player.emit('buffer', true);
       if (MOCK) { setTimeout(function () { if (tk === Player.token) Player.emit('buffer', false); }, 500); return; }
@@ -434,7 +445,7 @@
     each(document.querySelectorAll('.screen'), function (s) { s.classList.toggle('on', s.id === 's-' + name); });
     show($('topbar'), !!Screens[name].bar);
     each(document.querySelectorAll('#nav .f'), function (n) { n.classList.toggle('act', n.getAttribute('data-go') === name); });
-    if (!Screens[name].video) { document.body.classList.remove('video'); if (prev && Screens[prev] && Screens[prev].video) Player.stop(); }
+    if (!Screens[name].video) { document.body.classList.remove('video'); if (prev && Screens[prev] && Screens[prev].video) Player.stop(); Player.hideObject(); }
     show($('np'), !!Q.cur && !Screens[name].video && name !== 'who');
     F.root = $('s-' + name);
     if (F.el) F.el.classList.remove('focus');
@@ -1627,6 +1638,21 @@
     clearTimeout(dbgT);
     if (!keep) dbgT = setTimeout(function () { d.style.display = 'none'; }, 12000);
   }
+  // what is actually on the screen: sizes, visibility, and the element under the screen centre
+  function diag() {
+    function cs(e, p) { try { return window.getComputedStyle(e)[p]; } catch (x) { return '?'; } }
+    function rc(e) { try { var r = e.getBoundingClientRect(); return Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height); } catch (x) { return '?'; } }
+    var app = $('app'), sc = cur ? $('s-' + cur) : null, top = null, d = $('dbg');
+    try { if (d) d.style.display = 'none'; top = document.elementFromPoint(960, 400); if (d) d.style.display = 'block'; } catch (x) { }
+    var first = sc ? sc.querySelector('.f') : null;
+    return 'win ' + window.innerWidth + 'x' + window.innerHeight + ' dpr ' + window.devicePixelRatio +
+      ' | body.class "' + document.body.className + '" bg ' + cs(document.body, 'backgroundColor') +
+      ' | app ' + rc(app) + ' disp ' + cs(app, 'display') + ' op ' + cs(app, 'opacity') + ' vis ' + cs(app, 'visibility') + ' bg ' + cs(app, 'backgroundColor') +
+      ' | screen ' + cur + (sc ? ' ' + rc(sc) + ' disp ' + cs(sc, 'display') + ' op ' + cs(sc, 'opacity') + ' kids ' + sc.children.length : ' MISSING') +
+      ' | first ' + (first ? rc(first) + ' color ' + cs(first, 'color') : 'none') +
+      ' | top@960,400 ' + (top ? top.tagName + '#' + top.id + '.' + String(top.className).slice(0, 30) : 'null') +
+      ' | boot ' + ($('boot') ? 'present' : 'gone') + ' splash ' + (document.getElementById('splash') ? 'present' : 'gone') + ' av ' + ($('av') ? 'present' : 'none');
+  }
   function loadFonts() {
     // non-blocking: the sheet loads as "print" and is switched on once it has arrived
     var l = document.createElement('link'); l.rel = 'stylesheet'; l.media = 'print';
@@ -1665,6 +1691,7 @@
       // the user picker shows only on the very first launch; later it is reached from Back on the home screen
       if (store.get('profileSet', 0)) selectProfile(S.profile); else go('who');
       if (CFG.ready) CFG.ready(); // tell the launcher the first screen is up
+      setTimeout(function () { dbg(diag(), true); setTimeout(function () { var d = $('dbg'); if (d) d.style.display = 'none'; }, 90000); }, 2500);
       setInterval(poll, POLL_MS);
       setInterval(Status.send, 60000); Status.send();
       if (MOCK) S.server = 'up';
