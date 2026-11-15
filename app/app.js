@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.4.0';
+  var VERSION = '1.5.0';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -635,13 +635,16 @@
     },
     renderRows: function () {
       var rows = $('h-rows'); rows.innerHTML = ''; resetScroll($('s-home'));
-      var fav = S.lists[0];
-      if (fav && fav.items.length) rows.appendChild(rowEl(fav.name, fav.items.length + ' قناة', fav.items.slice(0, 60).map(function (c, i) { return chCard(c, i, 0); })));
-      if (S.lists.length > 1) rows.appendChild(rowEl('أقسام القنوات', (S.lists.length - 1) + ' قسم', S.lists.slice(1, 80).map(function (L, i) {
+      var fav = S.lists[0], rec = recents();
+      if (rec.length) rows.appendChild(rowEl('شوهد مؤخرًا', rec.length + ' قناة', rec.map(recentCard)));
+      else if (fav && fav.items.length) rows.appendChild(rowEl(fav.name, fav.items.length + ' قناة', fav.items.slice(0, 60).map(function (c, i) { return chCard(c, i, 0); })));
+      if (S.lists.length) rows.appendChild(rowEl('أقسام القنوات', S.lists.length + ' قسم', S.lists.slice(0, 80).map(function (L, i) {
         var e = el('div', 'catc f', '<b>' + esc(L.name) + '</b><small>' + L.items.length + ' قناة</small>');
-        e._ok = function () { go('live', { li: i + 1, ci: 0, openList: true }); };
+        e._ok = function () { go('live', { li: i, ci: 0, openList: true }); };
         return e;
       })));
+      var vf = vfavs();
+      if (vf.length) rows.appendChild(rowEl('مفضلتي', 'أفلام ومسلسلات', vf.slice(0, 30).map(function (x) { return posterCard(x, x.type); })));
       var res = S.resume.slice(0, 20);
       if (res.length) rows.appendChild(rowEl('كمّل المشاهدة', '', res.map(resumeCard)));
       if (S.movies && S.movies.latest.length) rows.appendChild(rowEl('أفلام جديدة', 'من اشتراككم', S.movies.latest.slice(0, 20).map(function (it) { return posterCard(it, 'movie'); })));
@@ -663,14 +666,34 @@
     return e;
   }
   function posterCard(it, type) {
-    var e = el('div', 'post f');
-    var g = el('div', 'gen'); g.style.background = artBg(it.id); e.appendChild(g);
-    var shade = el('div', 'shade'), pt = el('div', 'pt', esc(it.name));
-    e.appendChild(shade); e.appendChild(pt);
-    if (it.img) { var im = img(it.img); e.appendChild(im); im.onload = function () { shade.style.display = 'none'; pt.style.display = 'none'; }; }
-    if (it.rating > 0) e.appendChild(el('span', 'rt', '★ ' + (Math.round(it.rating * 10) / 10)));
+    var e = el('div', 'post f'), box = el('div', 'pimg');
+    var g = el('div', 'gen'); g.style.background = artBg(it.id); box.appendChild(g);
+    if (it.img) box.appendChild(img(it.img));
+    if (it.rating > 0) box.appendChild(el('span', 'rt', '★ ' + (Math.round(it.rating * 10) / 10)));
+    e.appendChild(box); e.appendChild(el('div', 'pt', esc(it.name)));
     e._item = it; e._type = type;
     e._ok = function () { go('detail', { type: type, item: it }); };
+    return e;
+  }
+  // films and series the viewer starred (kept on the TV, per user)
+  function vfavs() { return store.get(pkey('vfav'), []) || []; }
+  function isVfav(type, id) { var l = vfavs(); for (var i = 0; i < l.length; i++) if (l[i].type === type && l[i].id === id) return true; return false; }
+  function toggleVfav(type, it) {
+    var l = vfavs(), on = isVfav(type, it.id);
+    if (on) l = l.filter(function (x) { return !(x.type === type && x.id === it.id); });
+    else l.unshift({ type: type, id: it.id, name: it.name, img: it.img || '', rating: it.rating || 0, ext: it.ext || '' });
+    store.set(pkey('vfav'), l.slice(0, 100));
+    Screens.movies._built = false; Screens.series._built = false;
+    toast(on ? 'اتشال من المفضلة' : 'اتضاف للمفضلة');
+    return !on;
+  }
+  // channels watched lately (kept on the TV, per user)
+  function recents() { var out = []; each(store.get(pkey('recent'), []) || [], function (id) { var c = S.byId[id]; if (c) out.push(c); }); return out; }
+  function addRecent(id) { var l = (store.get(pkey('recent'), []) || []).filter(function (x) { return x !== id; }); l.unshift(id); store.set(pkey('recent'), l.slice(0, 20)); }
+  function recentCard(c) {
+    var e = el('div', 'ch f nologo', '<span class="mono">' + esc(c.name) + '</span><span class="nm">' + esc(c.name) + '</span>');
+    if (c.logo) { var im = img(c.logo); e.appendChild(im); im.onload = function () { e.className = e.className.replace('nologo', 'haslogo'); }; }
+    e._ok = function () { var p = findChannel(c.id, S.lists[0] ? S.lists[0].name : null); go('live', { li: p.li, ci: p.ci }); };
     return e;
   }
   function resumeCard(r) {
@@ -754,6 +777,7 @@
     }
     attempt();
     store.set(pkey('last'), { id: c.id, list: S.lists[S.li].name });
+    addRecent(c.id);
     Status.watching = c.name; Status.soon();
     loadEpg(c);
   }
@@ -923,11 +947,15 @@
     // search + categories first, so every section of the subscription is one press away
     var withItems = data.cats.filter(function (c) { return data.byCat[c.id] && data.byCat[c.id].length; });
     var search = el('div', 'catc srch f', '<b>بحث</b><small>بالاسم</small>'); search._ok = function () { go('search', { from: type === 'movie' ? 'movies' : 'series' }); };
-    addRow('الأقسام', withItems.length + ' قسم', [search].concat(withItems.map(function (c) {
+    var allc = el('div', 'catc allc f', '<b>الكل</b><small>' + data.all.length + '</small>');
+    allc._ok = function () { go('grid', { type: type, title: type === 'movie' ? 'كل الأفلام' : 'كل المسلسلات', items: data.all }); };
+    addRow('الأقسام', withItems.length + ' قسم', [search, allc].concat(withItems.map(function (c) {
       var e = el('div', 'catc f', '<b>' + esc(c.name) + '</b><small>' + data.byCat[c.id].length + '</small>');
       e._ok = function () { go('grid', { type: type, title: c.name, items: data.byCat[c.id] }); };
       return e;
     })));
+    var vf = vfavs().filter(function (x) { return x.type === type; });
+    if (vf.length) addRow('المفضلة', vf.length + '', vf.map(function (x) { return posterCard(x, type); }));
     var res = S.resume.filter(function (r) { return r.type === type; });
     if (res.length) addRow('كمّل المشاهدة', '', res.map(resumeCard));
     addRow('أحدث الإضافات', '', data.latest.slice(0, 20).map(function (it) { return posterCard(it, type); }));
@@ -953,30 +981,43 @@
   }
 
   /* ---- search (films and series by name) ---- */
-  function norm(t) { return String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي'); }
-  var SR = { from: 'movies', q: '' };
-  var runSearch = debounce(function () {
-    var q = norm($('sr-input').value).trim(), g = $('sr-grid'); SR.q = q;
+  function norm(t) { return String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[^a-z0-9\u0621-\u064A]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  var SR = { from: 'movies', q: null, t: null };
+  function searchNow() {
+    var q = norm($('sr-input').value), g = $('sr-grid');
+    if (q === SR.q) return;
+    SR.q = q;
     g.innerHTML = ''; g._mode = 'grid'; g._y = 0; g._lastG = null; g.style.webkitTransform = g.style.transform = '';
-    if (q.length < 2) { $('sr-hint').textContent = 'اكتبوا حرفين على الأقل'; return; }
-    var out = [], frag = document.createDocumentFragment();
+    var total = (S.movies ? S.movies.items.length : 0) + (S.series ? S.series.items.length : 0);
+    if (q.length < 2) { $('sr-hint').textContent = total ? 'اكتبوا حرفين على الأقل · ' + total + ' عنوان' : 'بنحمّل قائمة الأفلام والمسلسلات…'; return; }
+    var words = q.split(' '), tight = q.replace(/ /g, ''), out = [], frag = document.createDocumentFragment();
     each([['movie', S.movies], ['series', S.series]], function (t) {
       if (!t[1]) return;
-      each(t[1].items, function (it) { if (out.length >= 60) return; if (it._n === undefined) it._n = norm(it.name); if (it._n.indexOf(q) >= 0) out.push([it, t[0]]); });
+      each(t[1].items, function (it) {
+        if (out.length >= 80) return;
+        if (it._n === undefined) { it._n = norm(it.name); it._t = it._n.replace(/ /g, ''); }
+        var ok = true;
+        for (var i = 0; i < words.length; i++) if (it._n.indexOf(words[i]) < 0) { ok = false; break; }
+        if (ok || it._t.indexOf(tight) >= 0) out.push([it, t[0]]);
+      });
     });
     each(out, function (o) { var p = posterCard(o[0], o[1]); p.classList.add('gi'); frag.appendChild(p); });
     g.appendChild(frag); loadImages(g);
-    $('sr-hint').textContent = out.length ? out.length + (out.length >= 60 ? '+' : '') + ' نتيجة · ▼ للنتايج' : 'مفيش نتايج';
-  }, 500);
+    $('sr-hint').textContent = (out.length ? out.length + (out.length >= 80 ? '+' : '') + ' نتيجة · ▼ للنتايج' : 'مفيش نتايج لـ "' + $('sr-input').value + '"') + ' · من ' + total + ' عنوان';
+  }
+  var runSearch = debounce(searchNow, 400);
   Screens.search = {
     enter: function (arg, prev) {
       if (arg && arg.from) SR.from = arg.from;
       if (prev === 'detail' && $('sr-grid').children.length) { var g = $('sr-grid'); F.set(g._lastG && g._lastG.parentNode === g ? g._lastG : g.firstChild); return; }
-      $('sr-input').value = ''; $('sr-grid').innerHTML = ''; $('sr-hint').textContent = 'دوسوا OK واكتبوا الاسم';
+      $('sr-input').value = ''; $('sr-grid').innerHTML = ''; SR.q = null; $('sr-hint').textContent = 'دوسوا OK واكتبوا الاسم';
       F.set($('sr-box'), true);
-      if (!S.movies) loadVod('movie').catch(function () { });
-      if (!S.series) loadVod('series').catch(function () { });
+      if (!S.movies) loadVod('movie').then(function () { SR.q = null; }).catch(function () { });
+      if (!S.series) loadVod('series').then(function () { SR.q = null; }).catch(function () { });
+      // some TV keyboards do not send typing events: also look at the box twice a second
+      clearInterval(SR.t); SR.t = setInterval(searchNow, 500);
     },
+    leave: function () { clearInterval(SR.t); },
     back: function () { go(SR.from || 'movies'); }
   };
   function searchBlur(toResults) {
@@ -1005,8 +1046,8 @@
     var byCat = {};
     each(items, function (it) { (byCat[it.cat] = byCat[it.cat] || []).push(it); });
     for (var k in byCat) byCat[k].sort(function (a, b) { return b.added - a.added; });
-    var latest = items.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 40);
-    return { cats: cats, items: items, byCat: byCat, latest: latest };
+    var all = items.slice().sort(function (a, b) { return b.added - a.added; }), latest = all.slice(0, 40);
+    return { cats: cats, items: items, byCat: byCat, latest: latest, all: all };
   }
 
   /* ---- grid (see all) ---- */
@@ -1020,10 +1061,10 @@
       var shownN = 0;
       function more() {
         var frag = document.createDocumentFragment();
-        each(arg.items.slice(shownN, shownN + 56), function (it) { var p = posterCard(it, arg.type); p.classList.add('gi'); p._focus = function () { if (shownN - arg.items.indexOf(it) < 15 && shownN < arg.items.length) more(); }; frag.appendChild(p); });
+        each(arg.items.slice(shownN, shownN + 56), function (it, k) { var idx = shownN + k, p = posterCard(it, arg.type); p.classList.add('gi'); p._focus = function () { if (shownN - idx < 15 && shownN < arg.items.length) more(); }; frag.appendChild(p); });
         shownN += 56; gin.appendChild(frag); loadGrid();
       }
-      function loadGrid() { var y = gin._y || 0; each(gin.querySelectorAll('img[data-src]'), function (i) { var t = i.parentNode.offsetTop + y; if (t > -400 && t < 1300) { var s = i.getAttribute('data-src'); i.removeAttribute('data-src'); if (s) i.src = s; } }); }
+      function loadGrid() { var y = gin._y || 0; each(gin.querySelectorAll('img[data-src]'), function (i) { var t = i.parentNode.parentNode.offsetTop + y; if (t > -400 && t < 1300) { var s = i.getAttribute('data-src'); i.removeAttribute('data-src'); if (s) i.src = s; } }); }
       gin._onscroll = loadGrid;
       more();
       F.set(gin.firstChild, true);
@@ -1063,21 +1104,28 @@
     var box = $('d-ctas'); box.innerHTML = '';
     var it = D.full || D.item, r = findResume(D.type, it.id);
     function btn(html, fn) { var b = el('span', 'btn f', html); b._ok = fn; box.appendChild(b); return b; }
+    function favBtn() {
+      var b = btn('', function () { toggleVfav(D.type, it); paint(); });
+      function paint() { b.innerHTML = isVfav(D.type, it.id) ? '★ في المفضلة' : '☆ أضف للمفضلة'; }
+      paint(); return b;
+    }
     if (D.type === 'movie') {
       var ext = (D.info && D.info.movie_data && D.info.movie_data.container_extension) || it.ext || 'mp4';
       var first;
       if (r && r.pos > 60000) { first = btn('<span class="tri"></span>كمّل<small>· ' + minsLeft((r.dur - r.pos) / 1000) + '</small>', function () { playMovie(it, ext, r.pos); }); btn('من الأول', function () { playMovie(it, ext, 0); }); }
       else first = btn('<span class="tri"></span>شاهد', function () { playMovie(it, ext, 0); });
+      favBtn();
       F.set(first, true);
       return;
     }
     var eps = (D.info && D.info.episodes) || {}, seasons = Object.keys(eps).sort(function (a, b) { return a - b; });
-    if (!seasons.length) { var none = btn('مفيش حلقات متاحة', function () { }); F.set(none, true); return; }
+    if (!seasons.length) { var none = btn('مفيش حلقات متاحة', function () { }); favBtn(); F.set(none, true); return; }
     var target = null;
     if (r && r.ep) target = { season: String(r.ep.season), id: r.ep.id };
     var b1 = target
       ? btn('<span class="tri"></span>كمّل الحلقة ' + r.ep.num + (r.dur ? '<small>· ' + minsLeft((r.dur - r.pos) / 1000) + '</small>' : ''), function () { var e = findEp(eps, target.season, target.id); if (e) playEpisode(it, target.season, e, r.pos); })
       : btn('<span class="tri"></span>شاهد الحلقة الأولى', function () { playEpisode(it, seasons[0], eps[seasons[0]][0], 0); });
+    favBtn();
     var sbox = $('d-seasons'); sbox.innerHTML = '';
     each(seasons, function (s) {
       var p = el('span', 'f', 'الموسم ' + s); p._season = s;
@@ -1625,11 +1673,11 @@
     $('h-all')._ok = function () { go('live', { openList: true }); };
     $('h-speed')._ok = function () { Speed.show(); };
     $('sr-box')._ok = function () { $('sr-input').focus(); };
-    $('sr-input').addEventListener('input', runSearch);
+    each(['input', 'change', 'keyup', 'compositionend', 'blur'], function (ev) { $('sr-input').addEventListener(ev, runSearch); });
     $('sr-input').addEventListener('keydown', function (e) {
       var c = e.keyCode;
       // 65376 = Done and 65385 = Cancel on the TV's on-screen keyboard
-      if (c === 13 || c === 65376 || c === 40) { e.preventDefault(); runSearch(); setTimeout(function () { searchBlur(true); }, 600); }
+      if (c === 13 || c === 65376 || c === 40) { e.preventDefault(); setTimeout(function () { searchNow(); searchBlur(true); }, 250); }
       else if (c === 65385 || c === 10009 || c === 27) { e.preventDefault(); searchBlur(false); }
     });
     $('h-simple-on')._ok = function () { setSimple(true); };
