@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.3.1';
+  var VERSION = '1.3.2';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -92,7 +92,7 @@
   var X = {
     acc: null,
     base: function () { return X.acc.server + '/player_api.php?username=' + enc(X.acc.username) + '&password=' + enc(X.acc.password); },
-    call: function (action, extra) { return http('GET', X.base() + (action ? '&action=' + action : '') + (extra || ''), undefined, 60000); },
+    call: function (action, extra, timeout) { return http('GET', X.base() + (action ? '&action=' + action : '') + (extra || ''), undefined, timeout || 60000); },
     path: function (kind, id, ext) { return X.acc.server + '/' + kind + '/' + enc(X.acc.username) + '/' + enc(X.acc.password) + '/' + id + '.' + ext; },
     liveUrl: function (id) { return X.path('live', id, IS_TV ? S.liveExt : 'm3u8'); },
     movieUrl: function (id, ext) { return X.path('movie', id, ext || 'mp4'); },
@@ -1046,7 +1046,7 @@
     var a = S.cfg.account || {};
     if (!a.server || !a.username) { X.acc = null; S.user = null; return Promise.resolve(false); }
     X.acc = { server: normServer(a.server), username: String(a.username).trim(), password: String(a.password || '').trim() };
-    return X.call('').then(function (r) {
+    return X.call('', '', 15000).then(function (r) {
       var u = r && r.user_info;
       if (!u || u.auth === 0 || u.auth === '0') { S.accountError = 'بيانات الاشتراك مش صح. مهاب هيراجعها.'; S.user = null; return false; }
       S.accountError = ''; S.server = 'up';
@@ -1610,7 +1610,35 @@
   }
 
   /* ------------------------------------------------------------------ boot */
+  // A small status line drawn with inline styles, so it is readable even if the stylesheet failed.
+  // It shows what the app is doing while it starts and disappears shortly after the first screen.
+  var dbgT;
+  function dbg(t, keep) {
+    var d = $('dbg');
+    if (!d) {
+      d = document.createElement('div'); d.id = 'dbg';
+      d.style.cssText = 'position:absolute;left:30px;bottom:24px;z-index:99999;color:#fff;background:rgba(0,0,0,.75);font:22px/1.4 Tahoma,sans-serif;padding:8px 16px;border-radius:10px;direction:ltr;text-align:left;max-width:1800px';
+      document.body.appendChild(d);
+    }
+    var cssOk = false;
+    try { cssOk = window.getComputedStyle($('app')).position === 'absolute'; } catch (e) { }
+    d.textContent = 'Mohab TV ' + VERSION + ' | css:' + (cssOk ? 'ok' : 'NO') + ' | ' + t;
+    d.style.display = 'block';
+    clearTimeout(dbgT);
+    if (!keep) dbgT = setTimeout(function () { d.style.display = 'none'; }, 12000);
+  }
+  function loadFonts() {
+    // non-blocking: the sheet loads as "print" and is switched on once it has arrived
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.media = 'print';
+    l.onload = function () { l.media = 'all'; };
+    l.href = 'https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,500;1,500&display=swap';
+    document.head.appendChild(l);
+  }
   function boot() {
+    try { bootInner(); } catch (e) { dbg('BOOT ERROR: ' + (e && (e.stack || e.message) ? String(e.stack || e.message).slice(0, 400) : e), true); }
+  }
+  function bootInner() {
+    dbg('starting', true);
     buildDom(); Player.init(); registerKeys();
     document.addEventListener('keydown', onKey);
     applyPalette(PAL.gold);
@@ -1619,12 +1647,20 @@
     var remote = Remote.ok()
       ? Promise.race([Remote.load(), new Promise(function (res, rej) { setTimeout(function () { rej(new Error('slow')); }, 8000); })]).then(function (r) { return applyCfg(r || {}, true); }).catch(function () { })
       : Promise.resolve();
+    dbg('reading settings from the control panel', true);
     remote.then(function () {
       if (MOCK) { mockData(); return; }
       $('boot-msg').textContent = 'بنجهّز القنوات…';
-      return login().then(function () { return loadLive(); }).catch(function () { });
+      dbg('logging in to the subscription server', true);
+      return login().then(function (ok) {
+        dbg('login ' + (ok ? 'ok' : 'failed: ' + (S.accountError || 'no account')) + ', loading channels', true);
+        // never wait more than 25 seconds for the channel list; it keeps loading in the background
+        return Promise.race([loadLive(), new Promise(function (res) { setTimeout(res, 25000); })]);
+      }).catch(function () { });
     }).then(function () {
       buildLists();
+      dbg('ready: ' + S.streams.length + ' channels, opening ' + (store.get('profileSet', 0) ? 'saved user' : 'user picker'));
+      loadFonts();
       var b = $('boot'); if (b) b.parentNode.removeChild(b);
       // the user picker shows only on the very first launch; later it is reached from Back on the home screen
       if (store.get('profileSet', 0)) selectProfile(S.profile); else go('who');

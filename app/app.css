@@ -1,7 +1,8 @@
 /* Mohab TV - TV app styles.
    Target: Samsung Tizen 4.0 (2018) = Chromium 56.
    No CSS grid, no flex `gap`, no `inset`, no aspect-ratio. Spacing uses margins. */
-@import url("https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,500;1,500&display=swap");
+/* Web fonts are added by app.js after the first screen is up. An @import here made the whole
+   stylesheet wait for the font server, which left the TV screen black. */
 
 :root{
   --bg:#07080c; --bg-2:#12131b; --accent:#d9b26a; --accent-soft:rgba(217,178,106,.18);
