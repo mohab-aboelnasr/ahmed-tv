@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.3.3';
+  var VERSION = '1.3.4';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -1406,13 +1406,13 @@
     app.innerHTML = [
       '<div id="topbar" class="hidden"><div class="brand"><div class="mark">M</div><b>Mohab <i>TV</i></b><span class="pchip" id="pchip"></span></div>',
       '<div class="nav" id="nav"><span class="f" data-go="home" id="nav-home">الرئيسية</span><span class="f" data-go="live" id="nav-live">البث المباشر</span><span class="f" data-go="movies" id="nav-movie">الأفلام</span><span class="f" data-go="series" id="nav-series">المسلسلات</span><span class="f" data-go="quran" id="nav-quran">القرآن الكريم</span><span class="f" data-go="photos" id="nav-photos">الصور</span></div>',
+      '<div class="clock"><div class="t" id="clk"></div><div class="d" id="dt"></div></div></div>',
 
       '<section class="screen" id="s-photos"><div class="fill" style="background:#000"></div><img id="ps-img" alt=""><div class="psmsg hidden" id="ps-msg">مفيش صور لسه. مهاب هيبعتها من الموبايل.</div><div class="pscount" id="ps-count"></div></section>',
       '<section class="screen" id="s-sleep"><div class="fill" style="background:#000"></div><div class="sleepbox"><b id="sl-clock"></b><span id="sl-date"></span><small>البث واقف. دوسوا أي زرار عشان ترجعوا.</small></div></section>',
 
       '<section class="screen" id="s-who"><div class="fill amb"></div><div class="fill grain"></div><div class="who"><div class="wbrand"><div class="mark">M</div><b>Mohab <i>TV</i></b></div><h2>مين اللي هيتفرج؟</h2>',
       '<div class="wrow"><div class="wp f" id="who-ahmed"><span class="av">أ</span><b>أحمد جمال</b></div><div class="wp f" id="who-mohab"><span class="av">م</span><b>مهاب</b><small>قريبًا</small></div></div></div></section>',
-      '<div class="clock"><div class="t" id="clk"></div><div class="d" id="dt"></div></div></div>',
 
       '<section class="screen" id="s-open"><div class="fill amb"></div><div class="fill grain"></div><div class="openmsg"><div class="k">رسالة النهارده</div><h2 id="om-text"></h2><div class="sig">مهاب</div><div><span class="go f" id="om-go">OK للدخول</span></div></div></section>',
 
@@ -1691,7 +1691,11 @@
       // the user picker shows only on the very first launch; later it is reached from Back on the home screen
       if (store.get('profileSet', 0)) selectProfile(S.profile); else go('who');
       if (CFG.ready) CFG.ready(); // tell the launcher the first screen is up
-      setTimeout(function () { dbg(diag(), true); setTimeout(function () { var d = $('dbg'); if (d) d.style.display = 'none'; }, 90000); }, 2500);
+      // the detailed diagnostics stay on screen only when the first screen is not actually visible
+      setTimeout(function () {
+        var sc = cur ? $('s-' + cur) : null, bad = !sc || sc.getBoundingClientRect().width < 100;
+        if (bad) dbg(diag(), true); else { var d = $('dbg'); if (d) d.style.display = 'none'; }
+      }, 2500);
       setInterval(poll, POLL_MS);
       setInterval(Status.send, 60000); Status.send();
       if (MOCK) S.server = 'up';
