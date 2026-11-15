@@ -82,7 +82,7 @@
       <h2>جملة الترحيب</h2>
       <p>بتظهر كبيرة في الأيام العادية.</p>
       <label for="w-title">العنوان</label>
-      <input id="w-title" type="text" placeholder="Welcome Ahmed Gamal">
+      <input id="w-title" type="text" placeholder="أهلاً أحمد جمال">
       <label for="w-sub">السطر الصغير</label>
       <input id="w-sub" type="text" placeholder="سيبه فاضي عشان يتغير مع الوقت">
       <p class="hint">لو السطر الصغير فاضي، بيتغير لوحده: صباح الخير، نهاركم سعيد، مساء الخير، تصبحوا على خير.</p>
@@ -210,6 +210,11 @@
       <label class="toggle" for="l-adhan"><span>تنبيه وقت الأذان<small>رسالة بتظهر دقيقة وتختفي</small></span><input id="l-adhan" type="checkbox"></label>
       <label for="l-city">المدينة (لمواقيت الصلاة)</label>
       <select id="l-city"><option value="القاهرة|30.0444|31.2357">القاهرة</option><option value="الجيزة|30.0131|31.2089">الجيزة</option><option value="الإسكندرية|31.2001|29.9187">الإسكندرية</option><option value="المنصورة|31.0409|31.3785">المنصورة</option><option value="طنطا|30.7865|31.0004">طنطا</option><option value="الزقازيق|30.5877|31.502">الزقازيق</option><option value="بنها|30.466|31.1848">بنها</option><option value="دمياط|31.4165|31.8133">دمياط</option><option value="بورسعيد|31.2653|32.3019">بورسعيد</option><option value="الإسماعيلية|30.5965|32.2715">الإسماعيلية</option><option value="السويس|29.9668|32.5498">السويس</option><option value="دمنهور|31.0341|30.4682">دمنهور</option><option value="كفر الشيخ|31.1107|30.9388">كفر الشيخ</option><option value="شبين الكوم|30.5546|31.0102">شبين الكوم</option><option value="الفيوم|29.3084|30.8428">الفيوم</option><option value="بني سويف|29.0661|31.0994">بني سويف</option><option value="المنيا|28.1099|30.7503">المنيا</option><option value="أسيوط|27.1809|31.1837">أسيوط</option><option value="سوهاج|26.5591|31.6957">سوهاج</option><option value="قنا|26.1551|32.716">قنا</option><option value="الأقصر|25.6872|32.6396">الأقصر</option><option value="أسوان|24.0889|32.8998">أسوان</option><option value="الغردقة|27.2579|33.8116">الغردقة</option><option value="مرسى مطروح|31.3543|27.2373">مرسى مطروح</option></select>
+      <label for="l-fmt">طريقة بث القنوات</label>
+      <select id="l-fmt">
+        <option value="ts">العادية (TS)</option>
+        <option value="hls">البديلة (HLS)، جرّبها لو القنوات بتقطّع</option>
+      </select>
       <label for="l-fav">اسم قائمة القنوات</label>
       <input id="l-fav" type="text" placeholder="أحمد جمال">
       <button class="btn" id="l-save" type="button">احفظ</button>
@@ -245,6 +250,6 @@
 </main>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="admin.js?v=8"></script>
+<script src="admin.js?v=9"></script>
 </body>
 </html>

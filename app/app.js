@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.3.4';
+  var VERSION = '1.4.0';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -94,7 +94,11 @@
     base: function () { return X.acc.server + '/player_api.php?username=' + enc(X.acc.username) + '&password=' + enc(X.acc.password); },
     call: function (action, extra, timeout) { return http('GET', X.base() + (action ? '&action=' + action : '') + (extra || ''), undefined, timeout || 60000); },
     path: function (kind, id, ext) { return X.acc.server + '/' + kind + '/' + enc(X.acc.username) + '/' + enc(X.acc.password) + '/' + id + '.' + ext; },
-    liveUrl: function (id) { return X.path('live', id, IS_TV ? S.liveExt : 'm3u8'); },
+    liveUrl: function (id, alt) {
+      var ext = !IS_TV ? 'm3u8' : (stg().liveFormat === 'hls' ? 'm3u8' : S.liveExt);
+      if (alt && IS_TV) ext = ext === 'ts' ? 'm3u8' : 'ts'; // second try uses the other stream format
+      return X.path('live', id, ext);
+    },
     movieUrl: function (id, ext) { return X.path('movie', id, ext || 'mp4'); },
     epUrl: function (id, ext) { return X.path('series', id, ext || 'mp4'); }
   };
@@ -110,7 +114,7 @@
     profile: 'ahmed'
   };
   var PROFILES = {
-    ahmed: { name: 'أحمد جمال', av: 'أ', title: 'Welcome Ahmed Gamal' },
+    ahmed: { name: 'أحمد جمال', av: 'أ', title: 'أهلاً أحمد جمال' },
     mohab: { name: 'مهاب', av: 'م', title: 'Welcome Mohab' }
   };
   function pkey(k) { return k + '_' + S.profile; }
@@ -249,21 +253,90 @@
       if (F.el && F.el !== e) F.el.classList.remove('focus');
       F.el = e; e.classList.add('focus');
       var st = ancestor(e, 'strip'); if (st) st._last = e;
+      if (e.parentNode && e.parentNode._mode === 'grid') e.parentNode._lastG = e;
       if (!noScroll) keepVisible(e);
       if (e._focus) e._focus();
     },
-    candidates: function () {
+    // focusables that are not row or grid items (those are reached through the fast paths in move),
+    // plus one entry point per scrolling area so Up/Down can enter it
+    candidates: function (vertical) {
       var out = [], roots = [F.root];
       if (!$('topbar').classList.contains('hidden')) roots.push($('topbar'));
-      each(roots, function (r) { if (!r) return; each(r.querySelectorAll('.f'), function (e) { if (e.offsetParent !== null && !e.classList.contains('nofocus')) out.push(e); }); });
+      each(roots, function (r) {
+        if (!r) return;
+        each(r.querySelectorAll('.f:not(.ri):not(.gi)'), function (e) { if (e.offsetParent !== null && !e.classList.contains('nofocus')) out.push(e); });
+        if (!vertical) return;
+        each(r.querySelectorAll('.vscroll'), function (vs) {
+          if (vs.offsetParent === null) return;
+          var e = null;
+          if (vs._mode === 'grid') e = vs._lastG && vs._lastG.parentNode === vs ? vs._lastG : vs.querySelector('.f');
+          else {
+            var row = null, y = -(vs._y || 0);
+            each(vs.children, function (c) { if (!row && c.offsetTop >= y - 2 && c.querySelector('.f')) row = c; });
+            if (row) { var st = row.querySelector('.strip'); e = st && st._last && st._last.parentNode === st ? st._last : row.querySelector('.f'); }
+          }
+          if (e) out.push(e);
+        });
+      });
       return out;
+    },
+    sib: function (e, step) {
+      var n = e;
+      do { n = step > 0 ? n.nextElementSibling : n.previousElementSibling; } while (n && (!n.classList.contains('f') || n.classList.contains('nofocus')));
+      return n;
+    },
+    gridMove: function (cur, dir) {
+      var top = cur.offsetTop, left = cur.offsetLeft, n, best = null, line = null;
+      if (dir === 'left') { n = F.sib(cur, 1); return n && n.offsetTop === top ? n : null; }
+      if (dir === 'right') { n = F.sib(cur, -1); return n && n.offsetTop === top ? n : null; }
+      n = cur;
+      while ((n = F.sib(n, dir === 'down' ? 1 : -1))) {
+        if (n.offsetTop === top) continue;
+        if (line === null) line = n.offsetTop;
+        if (n.offsetTop !== line) break;
+        if (!best || Math.abs(n.offsetLeft - left) < Math.abs(best.offsetLeft - left)) best = n;
+      }
+      return best;
+    },
+    nearestIn: function (cur, strip) {
+      var a = rectOf(cur), ax = (a.left + a.right) / 2, dx = (strip._x || 0) - tx(strip)[0], best = null, bd = 1e12;
+      each(strip.children, function (c) {
+        if (!c.classList.contains('f')) return;
+        var r = c.getBoundingClientRect(), cx = (r.left + r.right) / 2 + dx;
+        if (cx < -200 || cx > 2120) return;
+        var d = Math.abs(cx - ax); if (d < bd) { bd = d; best = c; }
+      });
+      return best || strip.querySelector('.f');
     },
     move: function (dir) {
       var cur = F.el;
-      if (!cur || cur.offsetParent === null) { var c0 = F.candidates(); if (c0.length) F.set(c0[0]); return false; }
+      if (!cur || cur.offsetParent === null) { var c0 = F.candidates(true); if (c0.length) F.set(c0[0]); return false; }
+      var horiz = dir === 'left' || dir === 'right', next = null;
+      var grid = cur.parentNode && cur.parentNode._mode === 'grid' ? cur.parentNode : null;
+      var strip = grid ? null : ancestor(cur, 'strip');
+      if (grid) {
+        next = F.gridMove(cur, dir);
+        if (next) { F.set(next); return true; }
+        if (horiz || dir === 'down') return false;
+      } else if (strip && horiz) {
+        next = F.sib(cur, dir === 'left' ? 1 : -1);
+        if (next) F.set(next);
+        return !!next;
+      } else if (strip) {
+        var row = ancestor(cur, 'row'), vs = row ? ancestor(row, 'vscroll') : null;
+        if (row && vs) {
+          var r2 = row;
+          do { r2 = dir === 'down' ? r2.nextElementSibling : r2.previousElementSibling; } while (r2 && !r2.querySelector('.f'));
+          if (r2) {
+            var st2 = r2.querySelector('.strip');
+            next = st2 && st2._last && st2._last.parentNode === st2 ? st2._last : F.nearestIn(cur, st2);
+            if (next) { F.set(next); return true; }
+          }
+          if (dir === 'down') return false;
+        }
+      }
       var a = rectOf(cur), ax = (a.left + a.right) / 2, ay = (a.top + a.bottom) / 2, best = null, bs = 1e12;
-      var horiz = dir === 'left' || dir === 'right';
-      each(F.candidates(), function (b) {
+      each(F.candidates(!horiz), function (b) {
         if (b === cur) return;
         var r = rectOf(b); if (!r.width) return;
         var bx = (r.left + r.right) / 2, by = (r.top + r.bottom) / 2, p, ov, sd;
@@ -272,11 +345,10 @@
         if (horiz) { ov = Math.min(a.bottom, r.bottom) - Math.max(a.top, r.top); sd = Math.abs(by - ay); }
         else { ov = Math.min(a.right, r.right) - Math.max(a.left, r.left); sd = Math.abs(bx - ax); }
         if (horiz && ov <= 0) return; // left/right never jumps to another row
-        var s = p + (ov > 0 ? 0 : sd * 3) + (horiz ? sd * 2 : sd * 0.5);
-        if (s < bs) { bs = s; best = b; }
+        var sc = p + (ov > 0 ? 0 : sd * 3) + (horiz ? sd * 2 : sd * 0.5);
+        if (sc < bs) { bs = sc; best = b; }
       });
       if (!best) return false;
-      if (!horiz) { var st = ancestor(best, 'strip'); if (st && st._last && st._last !== best && st._last.offsetParent !== null && ancestor(cur, 'strip') !== st) best = st._last; }
       F.set(best);
       return true;
     }
@@ -365,7 +437,14 @@
         try {
           av.open(url);
           av.setDisplayRect(0, 0, 1920, 1080);
-          try { av.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX'); } catch (e) { }
+          // live TV fills the screen like a receiver; films keep their own shape
+          var dmode = Player.opts.live ? 'PLAYER_DISPLAY_MODE_FULL_SCREEN' : 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO';
+          try { av.setDisplayMethod(dmode); } catch (e) { }
+          // a few seconds of buffer before starting and after a stall makes weak connections stutter less
+          try {
+            av.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_SECOND', Player.opts.live ? 4 : 6);
+            av.setBufferingParam('PLAYER_BUFFER_FOR_RESUME', 'PLAYER_BUFFER_SIZE_IN_SECOND', Player.opts.live ? 6 : 10);
+          } catch (e) { }
           av.setListener({
             onbufferingstart: function () { if (tk === Player.token) Player.emit('buffer', true); },
             onbufferingcomplete: function () { if (tk === Player.token) Player.emit('buffer', false); },
@@ -377,6 +456,7 @@
           av.prepareAsync(function () {
             if (tk !== Player.token) return;
             try {
+              try { av.setDisplayRect(0, 0, 1920, 1080); av.setDisplayMethod(dmode); } catch (e2) { }
               av.play(); Player.playing = true;
               try { Player.dur = av.getDuration(); } catch (e) { }
               if (Player.opts.start > 0) av.seekTo(Player.opts.start, function () { }, function () { });
@@ -501,7 +581,7 @@
     _pt: 0,
     renderPrayer: function () {
       var box = $('h-pray');
-      if (stg().prayer === false) { show(box, false); return; }
+      if (stg().prayer !== true) { show(box, false); return; }
       var list = prayToday(), now = new Date(), nm = now.getHours() * 60 + now.getMinutes(), next = -1;
       each(list, function (p, i) { if (next < 0 && p.mins > nm) next = i; });
       var wait = next < 0 ? list[0].mins + 1440 - nm : list[next].mins - nm; if (next < 0) next = 0;
@@ -557,6 +637,11 @@
       var rows = $('h-rows'); rows.innerHTML = ''; resetScroll($('s-home'));
       var fav = S.lists[0];
       if (fav && fav.items.length) rows.appendChild(rowEl(fav.name, fav.items.length + ' قناة', fav.items.slice(0, 60).map(function (c, i) { return chCard(c, i, 0); })));
+      if (S.lists.length > 1) rows.appendChild(rowEl('أقسام القنوات', (S.lists.length - 1) + ' قسم', S.lists.slice(1, 80).map(function (L, i) {
+        var e = el('div', 'catc f', '<b>' + esc(L.name) + '</b><small>' + L.items.length + ' قناة</small>');
+        e._ok = function () { go('live', { li: i + 1, ci: 0, openList: true }); };
+        return e;
+      })));
       var res = S.resume.slice(0, 20);
       if (res.length) rows.appendChild(rowEl('كمّل المشاهدة', '', res.map(resumeCard)));
       if (S.movies && S.movies.latest.length) rows.appendChild(rowEl('أفلام جديدة', 'من اشتراككم', S.movies.latest.slice(0, 20).map(function (it) { return posterCard(it, 'movie'); })));
@@ -569,7 +654,7 @@
 
   function rowEl(title, count, cards) {
     var r = el('div', 'row'); r.appendChild(el('div', 'rowt', esc(title) + (count ? '<span>' + esc(count) + '</span>' : '')));
-    var w = el('div', 'swrap'), s = el('div', 'strip'); each(cards, function (c) { s.appendChild(c); }); w.appendChild(s); r.appendChild(w); return r;
+    var w = el('div', 'swrap'), s = el('div', 'strip'); each(cards, function (c) { c.classList.add('ri'); s.appendChild(c); }); w.appendChild(s); r.appendChild(w); return r;
   }
   function chCard(c, i, li) {
     var e = el('div', 'ch f nologo', '<span class="num">' + (i + 1) + '</span><span class="mono">' + esc(c.name) + '</span><span class="nm">' + esc(c.name) + '</span>');
@@ -609,15 +694,15 @@
       else if (!S.lists[S.li] || !S.lists[S.li].items[S.ci]) {
         var pos = findChannel(last.id, last.list); S.li = pos.li; S.ci = pos.ci;
       }
-      show($('l-list'), false);
+      listShow(false);
       if (!S.lists.length || !S.lists[S.li] || !S.lists[S.li].items.length) { toast('مفيش قنوات لسه'); setTimeout(function () { go('home'); }, 50); return; }
       tune(S.li, S.ci, true);
       if (arg && arg.openList) openList();
       F.el = null;
     },
-    leave: function () { clearTimeout(playLater); show($('l-list'), false); },
+    leave: function () { clearTimeout(playLater); listShow(false); },
     key: function (k) {
-      var listOn = !$('l-list').classList.contains('hidden');
+      var listOn = $('l-list').className.indexOf('hidden') < 0;
       if (listOn) return listKey(k);
       if (/^d\d$/.test(k)) { digit(k.slice(1)); return true; }
       switch (k) {
@@ -657,7 +742,8 @@
     clearTimeout(retryT);
     var tries = 0;
     function attempt() {
-      Player.play(X.acc ? X.liveUrl(c.id) : '', {
+      Player.play(X.acc ? X.liveUrl(c.id, tries > 0) : '', {
+        live: true,
         onbuffer: function (b) { show($('l-spin'), b); },
         onerror: function () {
           show($('l-spin'), false);
@@ -713,30 +799,46 @@
   }
 
   // channel list overlay
-  var LS = { li: 0, sel: 0 };
-  function openList() { LS.li = S.li; LS.sel = S.ci; renderList(); show($('l-list'), true); osd(false); }
+  function listShow(on) { var e = $('l-list'); if (on) e.classList.remove('hidden'); else e.className = 'chwrap hidden'; }
+  var LS = { li: 0, sel: 0, mode: 'ch' };
+  function openList() { LS.li = S.li; LS.sel = S.ci; LS.mode = 'ch'; renderList(); listShow(true); osd(false); }
   function renderList() {
     var L = S.lists[LS.li], n = L.items.length, box = $('cl-rows'), h = '';
-    $('cl-name').textContent = L.name; $('cl-count').textContent = n + ' قناة' + (S.lists.length > 1 ? ' · ' + (LS.li + 1) + '/' + S.lists.length : '');
+    $('cl-name').textContent = L.name; $('cl-count').textContent = n + ' قناة';
     var start = clamp(LS.sel - 4, 0, Math.max(0, n - 9));
     var favIds = favIdMap();
     for (var i = start; i < Math.min(n, start + 9); i++) {
       var c = L.items[i];
-      h += '<div class="li' + (i === LS.sel ? ' sel' : '') + (LS.li === S.li && i === S.ci ? ' playing' : '') + '"><span class="n">' + (i + 1) + '</span><span class="lg">' + (c.logo ? '<img src="' + esc(c.logo) + '" onerror="this.style.display=\'none\'">' : '') + '</span><span class="nmx">' + esc(c.name) + '</span>' + (favIds[c.id] && !L.fav ? '<span class="fav">★</span>' : '') + '</div>';
+      h += '<div class="li' + (i === LS.sel && LS.mode === 'ch' ? ' sel' : '') + (LS.li === S.li && i === S.ci ? ' playing' : '') + '"><span class="n">' + (i + 1) + '</span><span class="lg">' + (c.logo ? '<img src="' + esc(c.logo) + '" onerror="this.style.display=\'none\'">' : '') + '</span><span class="nmx">' + esc(c.name) + '</span>' + (favIds[c.id] && !L.fav ? '<span class="fav">★</span>' : '') + '</div>';
     }
     box.innerHTML = h;
+    // categories panel
+    var m = S.lists.length, cs = clamp(LS.li - 4, 0, Math.max(0, m - 10)), ch = '';
+    for (var j = cs; j < Math.min(m, cs + 10); j++) ch += '<div class="ct' + (j === LS.li ? (LS.mode === 'cat' ? ' sel' : ' cur') : '') + '"><span>' + esc(S.lists[j].name) + '</span><i>' + S.lists[j].items.length + '</i></div>';
+    $('ct-rows').innerHTML = ch;
+    $('cl-hint').textContent = LS.mode === 'cat' ? '▲ ▼ اختيار القسم · OK دخول القسم' : '◀ الأقسام · OK تشغيل';
+    $('l-list').className = 'chwrap' + (LS.mode === 'cat' ? ' incat' : '') + ($('l-list').className.indexOf('hidden') >= 0 ? ' hidden' : '');
   }
   function favIdMap() { var m = {}; each(favList(), function (f) { if (f) m[+f.id] = 1; }); return m; }
   function listKey(k) {
-    var n = S.lists[LS.li].items.length;
+    var n = S.lists[LS.li].items.length, m = S.lists.length;
+    if (LS.mode === 'cat') {
+      if (k === 'up') { LS.li = (LS.li - 1 + m) % m; LS.sel = LS.li === S.li ? S.ci : 0; }
+      else if (k === 'down') { LS.li = (LS.li + 1) % m; LS.sel = LS.li === S.li ? S.ci : 0; }
+      else if (k === 'chup') { LS.li = Math.max(0, LS.li - 9); LS.sel = 0; }
+      else if (k === 'chdown') { LS.li = Math.min(m - 1, LS.li + 9); LS.sel = 0; }
+      else if (k === 'ok' || k === 'right') LS.mode = 'ch';
+      else if (k === 'back') { listShow(false); return true; }
+      renderList(); return true;
+    }
     if (k === 'up') LS.sel = (LS.sel - 1 + n) % n;
     else if (k === 'down') LS.sel = (LS.sel + 1) % n;
     else if (k === 'chup') LS.sel = Math.max(0, LS.sel - 9);
     else if (k === 'chdown') LS.sel = Math.min(n - 1, LS.sel + 9);
-    else if (k === 'left' || k === 'right') { LS.li = (LS.li + (k === 'left' ? 1 : -1) + S.lists.length) % S.lists.length; LS.sel = LS.li === S.li ? S.ci : 0; }
-    else if (k === 'ok') { show($('l-list'), false); if (!(LS.li === S.li && LS.sel === S.ci)) tune(LS.li, LS.sel); else osd(true); return true; }
-    else if (k === 'back') { show($('l-list'), false); return true; }
-    else if (/^d\d$/.test(k)) { show($('l-list'), false); digit(k.slice(1)); return true; }
+    else if (k === 'left') LS.mode = 'cat';
+    else if (k === 'ok') { listShow(false); if (!(LS.li === S.li && LS.sel === S.ci)) tune(LS.li, LS.sel); else osd(true); return true; }
+    else if (k === 'back') { listShow(false); return true; }
+    else if (/^d\d$/.test(k)) { listShow(false); digit(k.slice(1)); return true; }
     renderList(); return true;
   }
 
@@ -809,26 +911,78 @@
   }
   function buildVodRows(P, type, data) {
     var rows = $(P + '-rows'); rows.innerHTML = ''; resetScroll($('s-' + (type === 'movie' ? 'movies' : 'series')));
-    var res = S.resume.filter(function (r) { return r.type === type; });
-    if (res.length) rows.appendChild(rowEl('كمّل المشاهدة', '', res.map(resumeCard)));
-    rows.appendChild(rowEl('أحدث الإضافات', '', data.latest.slice(0, 30).map(function (it) { return posterCard(it, type); })));
-    var shown = 0;
-    each(data.cats, function (c) {
-      if (shown >= 40) return;
-      var items = data.byCat[c.id]; if (!items || !items.length) return; shown++;
-      var cards = items.slice(0, 30).map(function (it) { return posterCard(it, type); });
-      if (items.length > 30) { var more = el('div', 'post more f', 'عرض الكل<br>' + items.length); more._ok = function () { go('grid', { type: type, title: c.name, items: items }); }; cards.push(more); }
-      rows.appendChild(rowEl(c.name, items.length + '', cards));
-    });
     var showBill = debounce(function (e) {
       if (!e || !e._item) return;
       var it = e._item; setBill(P, it, type);
       vodInfo(type, it).then(function (r) { if (F.el === e && r) setBill(P, enrich(type, it, r), type); }).catch(function () { });
     }, 450);
-    each(rows.querySelectorAll('.post'), function (p) { p._focus = function () { showBill(p); }; });
-    rows._onscroll = function () { loadVisibleRows(rows); };
+    function addRow(title, count, cards) {
+      each(cards, function (c) { if (c._item) c._focus = function () { showBill(c); }; });
+      rows.appendChild(rowEl(title, count, cards));
+    }
+    // search + categories first, so every section of the subscription is one press away
+    var withItems = data.cats.filter(function (c) { return data.byCat[c.id] && data.byCat[c.id].length; });
+    var search = el('div', 'catc srch f', '<b>بحث</b><small>بالاسم</small>'); search._ok = function () { go('search', { from: type === 'movie' ? 'movies' : 'series' }); };
+    addRow('الأقسام', withItems.length + ' قسم', [search].concat(withItems.map(function (c) {
+      var e = el('div', 'catc f', '<b>' + esc(c.name) + '</b><small>' + data.byCat[c.id].length + '</small>');
+      e._ok = function () { go('grid', { type: type, title: c.name, items: data.byCat[c.id] }); };
+      return e;
+    })));
+    var res = S.resume.filter(function (r) { return r.type === type; });
+    if (res.length) addRow('كمّل المشاهدة', '', res.map(resumeCard));
+    addRow('أحدث الإضافات', '', data.latest.slice(0, 20).map(function (it) { return posterCard(it, type); }));
+    // category rows are added a few at a time as the viewer scrolls down: building them all at once is slow on the TV
+    var next = 0;
+    function more(n) {
+      for (var k = 0; k < n && next < withItems.length; k++, next++) {
+        (function (c) {
+          var items = data.byCat[c.id], cards = items.slice(0, 20).map(function (it) { return posterCard(it, type); });
+          if (items.length > 20) { var m = el('div', 'post more f', 'عرض الكل<br>' + items.length); m._ok = function () { go('grid', { type: type, title: c.name, items: items }); }; cards.push(m); }
+          addRow(c.name, items.length + '', cards);
+        })(withItems[next]);
+      }
+    }
+    more(4);
+    rows._onscroll = function () {
+      var row = F.el ? ancestor(F.el, 'row', rows) : null, idx = row ? Array.prototype.indexOf.call(rows.children, row) : 0;
+      if (idx >= rows.children.length - 3) more(4);
+      loadVisibleRows(rows);
+    };
     loadVisibleRows(rows);
     if (data.latest[0]) setBill(P, data.latest[0], type);
+  }
+
+  /* ---- search (films and series by name) ---- */
+  function norm(t) { return String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي'); }
+  var SR = { from: 'movies', q: '' };
+  var runSearch = debounce(function () {
+    var q = norm($('sr-input').value).trim(), g = $('sr-grid'); SR.q = q;
+    g.innerHTML = ''; g._mode = 'grid'; g._y = 0; g._lastG = null; g.style.webkitTransform = g.style.transform = '';
+    if (q.length < 2) { $('sr-hint').textContent = 'اكتبوا حرفين على الأقل'; return; }
+    var out = [], frag = document.createDocumentFragment();
+    each([['movie', S.movies], ['series', S.series]], function (t) {
+      if (!t[1]) return;
+      each(t[1].items, function (it) { if (out.length >= 60) return; if (it._n === undefined) it._n = norm(it.name); if (it._n.indexOf(q) >= 0) out.push([it, t[0]]); });
+    });
+    each(out, function (o) { var p = posterCard(o[0], o[1]); p.classList.add('gi'); frag.appendChild(p); });
+    g.appendChild(frag); loadImages(g);
+    $('sr-hint').textContent = out.length ? out.length + (out.length >= 60 ? '+' : '') + ' نتيجة · ▼ للنتايج' : 'مفيش نتايج';
+  }, 500);
+  Screens.search = {
+    enter: function (arg, prev) {
+      if (arg && arg.from) SR.from = arg.from;
+      if (prev === 'detail' && $('sr-grid').children.length) { var g = $('sr-grid'); F.set(g._lastG && g._lastG.parentNode === g ? g._lastG : g.firstChild); return; }
+      $('sr-input').value = ''; $('sr-grid').innerHTML = ''; $('sr-hint').textContent = 'دوسوا OK واكتبوا الاسم';
+      F.set($('sr-box'), true);
+      if (!S.movies) loadVod('movie').catch(function () { });
+      if (!S.series) loadVod('series').catch(function () { });
+    },
+    back: function () { go(SR.from || 'movies'); }
+  };
+  function searchBlur(toResults) {
+    var i = $('sr-input'); i.blur();
+    var g = $('sr-grid');
+    if (toResults && g.firstChild) F.set(g.firstChild); else F.set($('sr-box'), true);
   }
 
   function loadVod(type) {
@@ -866,7 +1020,7 @@
       var shownN = 0;
       function more() {
         var frag = document.createDocumentFragment();
-        each(arg.items.slice(shownN, shownN + 56), function (it) { var p = posterCard(it, arg.type); p._focus = function () { if (shownN - arg.items.indexOf(it) < 15 && shownN < arg.items.length) more(); }; frag.appendChild(p); });
+        each(arg.items.slice(shownN, shownN + 56), function (it) { var p = posterCard(it, arg.type); p.classList.add('gi'); p._focus = function () { if (shownN - arg.items.indexOf(it) < 15 && shownN < arg.items.length) more(); }; frag.appendChild(p); });
         shownN += 56; gin.appendChild(frag); loadGrid();
       }
       function loadGrid() { var y = gin._y || 0; each(gin.querySelectorAll('img[data-src]'), function (i) { var t = i.parentNode.offsetTop + y; if (t > -400 && t < 1300) { var s = i.getAttribute('data-src'); i.removeAttribute('data-src'); if (s) i.src = s; } }); }
@@ -1038,11 +1192,18 @@
   }
 
   /* --------------------------------------------------------------- data */
+  // used until channels are chosen from the phone: beIN first, then other sports, then everything else
+  function defaultOrder() {
+    var sport = {}, a = [], b = [], c = [];
+    each(S.cats, function (x) { if (/sport|bein|رياض|كور/i.test(x.name)) sport[x.id] = 1; });
+    each(S.streams, function (x) { if (/bein/i.test(x.name)) a.push(x); else if (sport[x.cat]) b.push(x); else c.push(x); });
+    return a.concat(b, c).slice(0, 300);
+  }
   function buildLists() {
     var favIds = favList(), fav = [];
     each(favIds, function (f) { if (!f) return; var c = S.byId[+f.id]; if (c) fav.push(c); });
     var lists = [];
-    lists.push({ name: favName(), items: fav.length ? fav : S.streams.slice(0, 200), fav: true });
+    lists.push({ name: favName(), items: fav.length ? fav : defaultOrder(), fav: true });
     var byCat = {};
     each(S.streams, function (s) { (byCat[s.cat] = byCat[s.cat] || []).push(s); });
     each(S.cats, function (c) { if (byCat[c.id] && byCat[c.id].length) lists.push({ name: c.name, items: byCat[c.id] }); });
@@ -1322,10 +1483,10 @@
           return e;
         })));
         var first = null;
-        each(rows.querySelectorAll('.qc'), function (e) { if (e._rid === scr._focusId) first = e; });
+        each(rows.querySelectorAll('.qc'), function (e) { if (scr._focusId != null && e._rid === scr._focusId) first = e; });
         F.set(first || rows.querySelector('.f'));
       }
-      if (prev === 'reciter' && rows.children.length) { var back = null; each(rows.querySelectorAll('.qc'), function (e) { if (e._rid === scr._focusId) back = e; }); if (back) { F.set(back, true); return; } }
+      if (prev === 'reciter' && rows.children.length) { var back = null; each(rows.querySelectorAll('.qc'), function (e) { if (scr._focusId != null && e._rid === scr._focusId) back = e; }); if (back) { F.set(back, true); return; } }
       build();
       if (!Q.api) qLoad().then(function () { if (cur === 'quran') build(); });
     },
@@ -1358,7 +1519,7 @@
     var g = $('r-grid'); g.innerHTML = ''; g._mode = 'grid'; g._y = 0; g.style.webkitTransform = g.style.transform = '';
     var list = moList(m), frag = document.createDocumentFragment();
     each(list, function (n, idx) {
-      var e = el('div', 'su f', '<b>' + n + '</b><span>' + esc(SUWAR[n - 1]) + '</span>'); e._n = n;
+      var e = el('div', 'su f gi', '<b>' + n + '</b><span>' + esc(SUWAR[n - 1]) + '</span>'); e._n = n;
       e._ok = function () { if (Q.cur && !Q.cur.radio && Q.cur.rec.id === rec.id && Q.cur.mo[0] === m[0] && Q.cur.n === n) qToggle(); else qPlay(rec, m, idx); };
       frag.appendChild(e);
     });
@@ -1429,7 +1590,7 @@
       '<div class="osd off" id="l-osd"><div class="no"><b id="o-no"></b><span id="o-of"></span></div><div class="logo"><img id="o-logo" alt=""></div>',
       '<div class="mid"><div class="nm"><h3 id="o-name"></h3><span class="chip" id="o-list"></span></div><div class="epg"><div class="now"><div class="lbl" id="o-nowl"></div><div class="ttl" id="o-now"></div><div class="prog"><i id="o-prog"></i></div></div><div class="next"><div class="lbl" id="o-nextl"></div><div class="ttl" id="o-next"></div></div></div></div>',
       '<div class="side"><div class="t" id="o-clock"></div><div class="k">OK القائمة · ◀ ▶ آخر قناة<br>أخضر: مفضلة · رجوع: الرئيسية</div></div></div>',
-      '<div class="chlist hidden" id="l-list"><div class="lh"><h4 id="cl-name"></h4><span id="cl-count"></span></div><div class="hint">◀ ▶ تغيير القائمة · OK تشغيل</div><div id="cl-rows"></div></div></section>',
+      '<div class="chwrap hidden" id="l-list"><div class="chlist"><div class="lh"><h4 id="cl-name"></h4><span id="cl-count"></span></div><div class="hint" id="cl-hint"></div><div id="cl-rows"></div></div><div class="catlist"><div class="cth">الأقسام</div><div id="ct-rows"></div></div></div></section>',
 
       vodHtml('movies', 'm'), vodHtml('series', 's'),
 
@@ -1441,6 +1602,9 @@
 
       '<section class="screen" id="s-player"><div class="spin hidden" id="p-spin"></div><div class="vstate hidden" id="p-state"></div><div class="seekmsg hidden" id="p-seek"></div>',
       '<div class="vctl" id="p-ctl"><h3 id="p-title"></h3><div class="s" id="p-sub"></div><div class="vbar"><i id="p-fill"></i><b id="p-knob"></b></div><div class="vtimes"><span id="p-cur"></span><span id="p-dur"></span></div></div></section>',
+
+      '<section class="screen" id="s-search"><div class="fill" style="background:var(--bg)"></div><div class="sbar"><div class="sbox f" id="sr-box"><input id="sr-input" type="text" placeholder="اسم الفيلم أو المسلسل" autocomplete="off"></div><span class="shint" id="sr-hint"></span></div>',
+      '<div class="grid" style="top:270px"><div class="gin vscroll" id="sr-grid"></div></div></section>',
 
       '<section class="screen" id="s-quran"><div class="fill amb"></div><div class="fill grain"></div><div class="qhead"><div class="eyebrow">بسم الله الرحمن الرحيم</div><h1>القرآن الكريم</h1></div>',
       '<div class="vwrap" style="top:330px;height:750px"><div class="vscroll" id="q-rows"></div></div></section>',
@@ -1460,6 +1624,14 @@
     $('h-resume')._ok = function () { go('live'); };
     $('h-all')._ok = function () { go('live', { openList: true }); };
     $('h-speed')._ok = function () { Speed.show(); };
+    $('sr-box')._ok = function () { $('sr-input').focus(); };
+    $('sr-input').addEventListener('input', runSearch);
+    $('sr-input').addEventListener('keydown', function (e) {
+      var c = e.keyCode;
+      // 65376 = Done and 65385 = Cancel on the TV's on-screen keyboard
+      if (c === 13 || c === 65376 || c === 40) { e.preventDefault(); runSearch(); setTimeout(function () { searchBlur(true); }, 600); }
+      else if (c === 65385 || c === 10009 || c === 27) { e.preventDefault(); searchBlur(false); }
+    });
     $('h-simple-on')._ok = function () { setSimple(true); };
     $('st-full')._ok = function () { setSimple(false); };
     $('st-live')._ok = function () { go('live'); };
@@ -1488,7 +1660,7 @@
   /* -------------------------------------------- adhan alert, sleep timer, big text */
   var lastKeyAt = Date.now();
   function checkAdhan(d) {
-    if (stg().prayer === false || stg().adhan === false || !isAhmed() || !cur || cur === 'who' || cur === 'sleep') return;
+    if (stg().prayer !== true || stg().adhan === false || !isAhmed() || !cur || cur === 'who' || cur === 'sleep') return;
     var nm = d.getHours() * 60 + d.getMinutes();
     each(prayToday(), function (p) {
       if (p.mins !== nm) return;
