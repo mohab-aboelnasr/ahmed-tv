@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.3.0';
+  var VERSION = '1.3.1';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -1628,6 +1628,7 @@
       var b = $('boot'); if (b) b.parentNode.removeChild(b);
       // the user picker shows only on the very first launch; later it is reached from Back on the home screen
       if (store.get('profileSet', 0)) selectProfile(S.profile); else go('who');
+      if (CFG.ready) CFG.ready(); // tell the launcher the first screen is up
       setInterval(poll, POLL_MS);
       setInterval(Status.send, 60000); Status.send();
       if (MOCK) S.server = 'up';

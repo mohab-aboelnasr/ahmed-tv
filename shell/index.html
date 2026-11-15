@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, user-scalable=no">
+<title>Mohab TV</title>
+<style>
+  html,body{margin:0;width:1920px;height:1080px;overflow:hidden;background:#07080c}
+  #splash{position:absolute;left:0;top:0;width:1920px;height:1080px;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;font-family:Tahoma,sans-serif;color:#a7a197}
+  #splash .m{width:120px;height:120px;border-radius:30px;background:linear-gradient(145deg,#d9b26a,#3a3226);color:#07080c;font-size:72px;font-weight:700;line-height:120px;text-align:center}
+  #splash p{font-size:26px;margin-top:30px}
+  #splash small{font-size:20px;margin-top:14px;color:#6b665c;direction:ltr}
+  #shell-errors{display:none;position:absolute;left:40px;top:40px;right:40px;z-index:9999;background:rgba(120,0,0,.92);color:#fff;font:26px/1.5 Tahoma,sans-serif;padding:20px 26px;border-radius:14px;direction:ltr;text-align:left;word-break:break-all}
+</style>
+<!-- Samsung TV APIs (AVPlay video player). Only resolves on the TV. -->
+<script src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<div id="splash" style="z-index:9000;background:#07080c"><div class="m">M</div><p>Mohab TV</p><small id="splash-status">starting</small></div>
+<div id="shell-errors"></div>
+<script src="settings.js"></script>
+<script src="loader.js"></script>
+</body>
+</html>
