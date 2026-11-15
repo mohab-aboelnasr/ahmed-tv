@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.5.0';
+  var VERSION = '1.5.1';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -440,6 +440,9 @@
           // live TV fills the screen like a receiver; films keep their own shape
           var dmode = Player.opts.live ? 'PLAYER_DISPLAY_MODE_FULL_SCREEN' : 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO';
           try { av.setDisplayMethod(dmode); } catch (e) { }
+          // picture quality: let a UHD panel decode UHD channels, and start adaptive (HLS) streams at their best quality
+          try { if (webapis.productinfo && webapis.productinfo.isUdPanelSupported && webapis.productinfo.isUdPanelSupported()) av.setStreamingProperty('SET_MODE_4K', 'TRUE'); } catch (e) { }
+          if (/\.m3u8/i.test(url)) { try { av.setStreamingProperty('ADAPTIVE_INFO', 'STARTBITRATE=HIGHEST|SKIPBITRATE=LOWEST'); } catch (e) { } }
           // a few seconds of buffer before starting and after a stall makes weak connections stutter less
           try {
             av.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_SECOND', Player.opts.live ? 4 : 6);
@@ -458,6 +461,20 @@
             try {
               try { av.setDisplayRect(0, 0, 1920, 1080); av.setDisplayMethod(dmode); } catch (e2) { }
               av.play(); Player.playing = true;
+              // report what is really being decoded (shown on the channel banner)
+              setTimeout(function () {
+                if (tk !== Player.token) return;
+                try {
+                  var inf = av.getCurrentStreamInfo(), txt = '';
+                  for (var i = 0; i < inf.length; i++) {
+                    if (inf[i].type !== 'VIDEO') continue;
+                    var x = JSON.parse(inf[i].extra_info || '{}');
+                    var br = parseInt(x.Bit_rate, 10) || 0;
+                    txt = (x.Width || '?') + '×' + (x.Height || '?') + (br > 0 ? ' · ' + (Math.round(br / 100000) / 10) + ' Mbps' : '');
+                  }
+                  Player.emit('info', txt + (/\.m3u8/i.test(url) ? ' · HLS' : ' · TS'));
+                } catch (e3) { }
+              }, 3000);
               try { Player.dur = av.getDuration(); } catch (e) { }
               if (Player.opts.start > 0) av.seekTo(Player.opts.start, function () { }, function () { });
               Player.emit('buffer', false);
@@ -753,7 +770,7 @@
     S.li = li; S.ci = ci;
     var c = L.items[ci];
     $('o-no').textContent = ci + 1; $('o-of').textContent = 'من ' + L.items.length;
-    $('o-name').textContent = c.name; $('o-list').textContent = L.name; $('l-listname').textContent = L.name;
+    $('o-name').textContent = c.name; $('o-list').textContent = L.name; show($('o-q'), false); $('l-listname').textContent = L.name;
     var lg = $('o-logo'); if (c.logo) { lg.style.display = ''; lg.onerror = function () { lg.style.display = 'none'; }; lg.src = c.logo; } else lg.style.display = 'none';
     $('o-now').textContent = ''; $('o-next').textContent = ''; $('o-nowl').textContent = ''; $('o-nextl').textContent = ''; $('o-prog').style.width = '0';
     osd(true);
@@ -767,6 +784,7 @@
     function attempt() {
       Player.play(X.acc ? X.liveUrl(c.id, tries > 0) : '', {
         live: true,
+        oninfo: function (t) { var q = $('o-q'); q.textContent = t; show(q, !!t); },
         onbuffer: function (b) { show($('l-spin'), b); },
         onerror: function () {
           show($('l-spin'), false);
@@ -1636,7 +1654,7 @@
 
       '<section class="screen" id="s-live"><div class="spin hidden" id="l-spin"></div><div class="toplist hidden" id="l-top">القائمة: <b id="l-listname"></b></div><div class="numbox hidden" id="l-num"></div>',
       '<div class="osd off" id="l-osd"><div class="no"><b id="o-no"></b><span id="o-of"></span></div><div class="logo"><img id="o-logo" alt=""></div>',
-      '<div class="mid"><div class="nm"><h3 id="o-name"></h3><span class="chip" id="o-list"></span></div><div class="epg"><div class="now"><div class="lbl" id="o-nowl"></div><div class="ttl" id="o-now"></div><div class="prog"><i id="o-prog"></i></div></div><div class="next"><div class="lbl" id="o-nextl"></div><div class="ttl" id="o-next"></div></div></div></div>',
+      '<div class="mid"><div class="nm"><h3 id="o-name"></h3><span class="chip" id="o-list"></span><span class="chip q hidden" id="o-q"></span></div><div class="epg"><div class="now"><div class="lbl" id="o-nowl"></div><div class="ttl" id="o-now"></div><div class="prog"><i id="o-prog"></i></div></div><div class="next"><div class="lbl" id="o-nextl"></div><div class="ttl" id="o-next"></div></div></div></div>',
       '<div class="side"><div class="t" id="o-clock"></div><div class="k">OK القائمة · ◀ ▶ آخر قناة<br>أخضر: مفضلة · رجوع: الرئيسية</div></div></div>',
       '<div class="chwrap hidden" id="l-list"><div class="chlist"><div class="lh"><h4 id="cl-name"></h4><span id="cl-count"></span></div><div class="hint" id="cl-hint"></div><div id="cl-rows"></div></div><div class="catlist"><div class="cth">الأقسام</div><div id="ct-rows"></div></div></div></section>',
 

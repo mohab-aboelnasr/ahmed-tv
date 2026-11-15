@@ -385,3 +385,4 @@ img{display:block}
 .shint{font-size:28px;color:var(--muted);margin-right:34px;vertical-align:middle}
 .big .catc b{font-size:34px;max-height:86px}
 .catc.allc{background:rgba(255,255,255,.13)}
+.osd .chip.q{background:rgba(255,255,255,.1);color:var(--text);direction:ltr;font-size:22px}
