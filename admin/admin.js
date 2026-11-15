@@ -316,6 +316,7 @@
     $('l-shift').value = String(parseInt(s.hijriShift, 10) || 0);
     $('l-fav').value = s.favName || '';
     $('l-big').checked = !!s.bigText;
+    $('l-adult').checked = s.adult === true;
     $('l-start').checked = s.startLive !== false;
     $('l-sleep').value = String(s.sleepHours == null ? 2 : s.sleepHours);
     $('l-pray').checked = s.prayer === true;
@@ -325,7 +326,7 @@
     [...$('l-city').options].forEach((o) => { o.selected = o.value.split('|')[0] === cn; });
   }
   document.querySelectorAll('#pal button').forEach((b) => { b.onclick = () => { palette = b.dataset.k; document.querySelectorAll('#pal button').forEach((x) => x.setAttribute('aria-pressed', x === b ? 'true' : 'false')); saveSettings({ palette }); }; });
-  $('l-save').onclick = () => { const c = $('l-city').value.split('|'); saveSettings({ auto: $('l-auto').checked, force: $('l-force').value, hijriShift: parseInt($('l-shift').value, 10) || 0, favName: $('l-fav').value.trim(), bigText: $('l-big').checked, startLive: $('l-start').checked, sleepHours: parseInt($('l-sleep').value, 10) || 0, prayer: $('l-pray').checked, adhan: $('l-adhan').checked, liveFormat: $('l-fmt').value, city: { name: c[0], lat: +c[1], lng: +c[2] } }).then(renderFavs); };
+  $('l-save').onclick = () => { const c = $('l-city').value.split('|'); saveSettings({ auto: $('l-auto').checked, force: $('l-force').value, hijriShift: parseInt($('l-shift').value, 10) || 0, favName: $('l-fav').value.trim(), bigText: $('l-big').checked, startLive: $('l-start').checked, adult: $('l-adult').checked, sleepHours: parseInt($('l-sleep').value, 10) || 0, prayer: $('l-pray').checked, adhan: $('l-adhan').checked, liveFormat: $('l-fmt').value, city: { name: c[0], lat: +c[1], lng: +c[2] } }).then(renderFavs); };
 
   // ---------- account
   function renderAccount() { const a = doc.account || {}; $('a-server').value = a.server || ''; $('a-user').value = a.username || ''; $('a-pass').value = a.password || ''; $('a-snippet').textContent = snippet(DB, KEY, ANON); }

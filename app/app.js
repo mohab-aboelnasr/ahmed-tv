@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.5.1';
+  var VERSION = '1.6.0';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -740,7 +740,7 @@
       if (arg && arg.openList) openList();
       F.el = null;
     },
-    leave: function () { clearTimeout(playLater); listShow(false); },
+    leave: function () { clearTimeout(playLater); clearTimeout(retryT); clearTimeout(stallT); listShow(false); },
     key: function (k) {
       var listOn = $('l-list').className.indexOf('hidden') < 0;
       if (listOn) return listKey(k);
@@ -777,18 +777,29 @@
     clearTimeout(playLater);
     playLater = setTimeout(function () { startChannel(c); }, now ? 0 : 380);
   }
-  var retryT;
+  var retryT, stallT;
   function startChannel(c) {
-    clearTimeout(retryT);
-    var tries = 0;
+    clearTimeout(retryT); clearTimeout(stallT);
+    var tries = 0, stalls = 0;
+    // still on this channel? (the user may have zapped or left live tv)
+    function same() { var cc = S.lists[S.li] && S.lists[S.li].items[S.ci]; return cur === 'live' && cc && cc.id === c.id; }
+    // a frozen picture reconnects by itself instead of waiting for someone to change the channel
+    function revive() { if (!same() || MOCK) return; if (stalls++ >= 3) return; tries++; attempt(); }
     function attempt() {
-      Player.play(X.acc ? X.liveUrl(c.id, tries > 0) : '', {
+      clearTimeout(stallT);
+      Player.play(X.acc ? X.liveUrl(c.id, tries % 2 === 1) : '', {
         live: true,
         oninfo: function (t) { var q = $('o-q'); q.textContent = t; show(q, !!t); },
-        onbuffer: function (b) { show($('l-spin'), b); },
+        onbuffer: function (b) {
+          show($('l-spin'), b);
+          clearTimeout(stallT);
+          if (b) stallT = setTimeout(revive, 12000);
+        },
+        ontime: function () { if (stalls && Player.cur > 60000) stalls = 0; },
+        onend: function () { clearTimeout(stallT); stallT = setTimeout(revive, 1500); },
         onerror: function () {
-          show($('l-spin'), false);
-          if (tries++ < 1) { retryT = setTimeout(attempt, 2500); return; }
+          show($('l-spin'), false); clearTimeout(stallT);
+          if (tries++ < 1) { retryT = setTimeout(function () { if (same()) attempt(); }, 2500); return; }
           $('o-now').innerHTML = '<span class="err">القناة مش شغالة دلوقتي، جرّبوا قناة تانية</span>'; osd(true, 8000);
         }
       });
@@ -1049,8 +1060,8 @@
     if (!X.acc) return Promise.reject(new Error('no-account'));
     var a = type === 'movie' ? ['get_vod_categories', 'get_vod_streams'] : ['get_series_categories', 'get_series'];
     return Promise.all([X.call(a[0]), X.call(a[1])]).then(function (r) {
-      var cats = asArray(r[0]).map(function (c) { return { id: String(c.category_id), name: c.category_name }; });
-      var items = asArray(r[1]).map(function (s) {
+      var fam = famCats(r[0]), cats = fam.cats;
+      var items = asArray(r[1]).filter(fam.ok).map(function (s) {
         if (type === 'movie') return { id: +s.stream_id, name: s.name, img: s.stream_icon, cat: String(s.category_id), rating: parseFloat(s.rating) || 0, added: +s.added || 0, ext: s.container_extension || 'mp4', year: s.year || '' };
         var bd = s.backdrop_path;
         return { id: +s.series_id, name: s.name, img: s.cover, cat: String(s.category_id), rating: parseFloat(s.rating) || 0, added: +s.last_modified || 0, plot: s.plot || '', genre: s.genre || '', year: String(s.releaseDate || s.release_date || '').slice(0, 4), backdrop: (bd && (Array.isArray(bd) ? bd[0] : bd)) || '' };
@@ -1309,13 +1320,21 @@
       if (was !== S.server) { Status.soon(); if (was === 'up' && S.server === 'down') toast('السيرفر واقع دلوقتي. القنوات ممكن ماتشتغلش لحد ما يرجع.'); else if (was === 'down' && S.server === 'up') toast('السيرفر رجع يشتغل'); }
     });
   }
+  // family filter: adult categories never show unless switched on from the phone
+  var ADULT = /adult|xxx|porn|18\s*\+|\+\s*18|للكبار|اباح|إباح/i;
+  function famCats(raw) {
+    var bad = {}, on = stg().adult === true;
+    var cats = [];
+    each(asArray(raw), function (c) { var id = String(c.category_id); if (!on && ADULT.test(c.category_name || '')) { bad[id] = 1; return; } cats.push({ id: id, name: c.category_name }); });
+    return { cats: cats, ok: function (s) { return on || !(bad[String(s.category_id)] || String(s.is_adult) === '1' || ADULT.test(s.name || '')); } };
+  }
   function loadLive() {
     var cached = store.get('live', null);
     if (cached && cached.s) setLive(cached.c, cached.s.map(function (x) { return { id: x[0], name: x[1], logo: x[2], cat: x[3] }; }));
     if (!X.acc) return Promise.resolve();
     var fresh = Promise.all([X.call('get_live_categories'), X.call('get_live_streams')]).then(function (r) {
-      var cats = asArray(r[0]).map(function (c) { return { id: String(c.category_id), name: c.category_name }; });
-      var streams = asArray(r[1]).map(function (s) { return { id: +s.stream_id, name: s.name, logo: s.stream_icon || '', cat: String(s.category_id) }; });
+      var fam = famCats(r[0]), cats = fam.cats;
+      var streams = asArray(r[1]).filter(fam.ok).map(function (s) { return { id: +s.stream_id, name: s.name, logo: s.stream_icon || '', cat: String(s.category_id) }; });
       setLive(cats, streams);
       store.set('live', { c: cats, s: streams.map(function (x) { return [x.id, x.name, x.logo, x.cat]; }) });
       uploadCatalog();
