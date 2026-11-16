@@ -233,7 +233,7 @@ img{display:block}
 #pop .box{width:1060px;border-radius:34px;padding:56px 70px;background:linear-gradient(160deg,var(--bg-2),var(--bg));box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 40px 120px rgba(0,0,0,.7)}
 #pop .k{font-size:22px;color:var(--accent);font-weight:500}
 #pop h5{font-family:var(--f-display);font-size:56px;margin:10px 0 20px;font-weight:600}
-#pop p{font-size:34px;line-height:1.6;margin:0}
+#pop p{font-size:34px;line-height:1.6;margin:0;white-space:pre-line}
 #pop .acts{margin-top:40px}
 #toast{position:absolute;bottom:60px;left:50%;width:900px;margin-left:-450px;text-align:center;font-size:26px;background:rgba(10,11,15,.92);border-radius:999px;padding:16px 0;z-index:60;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
 

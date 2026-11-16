@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.6.0';
+  var VERSION = '1.6.1';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -731,9 +731,12 @@
     enter: function (arg) {
       var last = store.get(pkey('last'), {}) || {};
       if (arg && arg.li != null) { S.li = arg.li; S.ci = arg.ci; }
-      else if (!S.lists[S.li] || !S.lists[S.li].items[S.ci]) {
-        var pos = findChannel(last.id, last.list); S.li = pos.li; S.ci = pos.ci;
+      else if (!S.lists[S.li] || !S.lists[S.li].items[S.ci] || !S.liveOpened) {
+        // every time the app opens, live tv starts on beIN Sports HD (not the last channel watched)
+        var pref = openChannel();
+        var pos = pref ? findChannel(pref.id, S.lists[0].name) : findChannel(last.id, last.list); S.li = pos.li; S.ci = pos.ci;
       }
+      S.liveOpened = true;
       listShow(false);
       if (!S.lists.length || !S.lists[S.li] || !S.lists[S.li].items.length) { toast('مفيش قنوات لسه'); setTimeout(function () { go('home'); }, 50); return; }
       tune(S.li, S.ci, true);
@@ -757,6 +760,22 @@
       return true;
     }
   };
+  // the channel live tv opens on: settings.startChannel from the phone, else "beIN Sports HD"
+  // picks the plain HD feed over 4K / FHD / SD / Gourmet / Max etc. and the lowest number (HD 1 before HD 2)
+  function openChannel() {
+    var want = String(stg().startChannel || 'beIN Sports HD').toLowerCase(), words = want.split(/\s+/), best = null, bestScore = -1;
+    each(S.streams, function (c) {
+      var n = ' ' + String(c.name || '').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff+]+/g, ' ') + ' ';
+      for (var i = 0; i < words.length; i++) if (n.indexOf(words[i]) < 0) return;
+      var sc = 100;
+      if (/ (4k|uhd|fhd|sd|hevc|h265|raw) /.test(n)) sc -= 60;
+      if (/gourmet|max|premium|xtra|extra|news|movies|junior|drama|english| en /.test(n)) sc -= 40;
+      var num = n.match(/ (\d{1,2}) /); if (num) sc -= +num[1]; else sc -= 0.5;
+      sc -= n.length / 100;
+      if (sc > bestScore) { bestScore = sc; best = c; }
+    });
+    return best;
+  }
   function findChannel(id, listName) {
     for (var li = 0; li < S.lists.length; li++) { if (listName && S.lists[li].name !== listName) continue; var items = S.lists[li].items; for (var ci = 0; ci < items.length; ci++) if (items[ci].id === id) return { li: li, ci: ci }; }
     if (listName) return findChannel(id, null);
@@ -1376,6 +1395,16 @@
     store.set('seenMsg', key);
     Pop.show({ kicker: 'رسالة جديدة', title: 'من مهاب', text: t, buttons: [{ label: 'تمام' }] });
   }
+  // one-time note after the 1.6.1 update, shown once to Ahmed Gamal's profile
+  function updateNote() {
+    var id = 'note-161';
+    if (store.get('seenNote', '') === id) return;
+    setTimeout(function () {
+      if (!isAhmed() || cur === 'who' || cur === 'open' || Pop.open) { if (cur !== 'who') setTimeout(updateNote, 4000); return; }
+      store.set('seenNote', id);
+      Pop.show({ kicker: 'تحديث جديد', title: 'من مهاب', text: 'خلّينا القنوات تفتح على طول على beIN Sports HD، ولغينا خالص موضوع إن التطبيق يقفل لوحده بعد ساعتين أو ٣ لو محدش داس على الريموت، فاتفرجوا براحتكم.\n\nوابنكم مهاب بيسلّم عليكم وبيقولكم كل حاجة تمام ❤', buttons: [{ label: 'تمام' }] });
+    }, 2500);
+  }
   function maybeShowUrgent() {
     var u = S.cfg.urgent; if (!u || !u.text || !isAhmed() || cur === 'who') return;
     var id = String(u.id || u.at || u.text); if (store.get('seenUrgent', '') === id) return;
@@ -1758,7 +1787,7 @@
     });
   }
   function checkSleep() {
-    var hrs = stg().sleepHours == null ? 2 : +stg().sleepHours;
+    var hrs = 0; // sleep timer switched off for good: the app never stops by itself
     if (!hrs || Pop.open || !cur) return;
     if (!(cur === 'live' || cur === 'player' || Q.cur)) return;
     if (Date.now() - lastKeyAt < hrs * 3600000) return;
@@ -1947,6 +1976,7 @@
       var b = $('boot'); if (b) b.parentNode.removeChild(b);
       // the user picker shows only on the very first launch; later it is reached from Back on the home screen
       if (store.get('profileSet', 0)) selectProfile(S.profile); else go('who');
+      updateNote();
       if (CFG.ready) CFG.ready(); // tell the launcher the first screen is up
       // the detailed diagnostics stay on screen only when the first screen is not actually visible
       setTimeout(function () {
