@@ -173,7 +173,7 @@ img{display:block}
 .epg .now{-webkit-flex:1;flex:1;min-width:0;margin-left:40px}
 .epg .lbl{font-size:19px;color:var(--muted);direction:rtl}
 .epg .ttl{font-size:29px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.epg .next{width:420px;color:var(--muted)}
+.epg .next{width:330px;color:var(--muted)}
 .epg .next .ttl{font-size:25px}
 .prog{height:6px;border-radius:6px;background:rgba(255,255,255,.12);margin-top:12px;overflow:hidden}
 .prog i{display:block;height:100%;background:var(--accent);float:right}
@@ -386,3 +386,11 @@ img{display:block}
 .big .catc b{font-size:34px;max-height:86px}
 .catc.allc{background:rgba(255,255,255,.13)}
 .osd .chip.q{background:rgba(255,255,255,.1);color:var(--text);direction:ltr;font-size:22px}
+.epg .next+.next{margin-right:24px;width:290px}
+.cepg{position:absolute;left:60px;bottom:70px;width:640px;padding:34px 40px;border-radius:26px;background:rgba(6,7,10,.9);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.cepg .en{font-size:22px;color:var(--muted);margin-bottom:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right}
+.cepg .er{padding:12px 0;border-top:1px solid rgba(255,255,255,.08)}
+.cepg .el{font-size:20px;color:var(--muted)}
+.cepg .er.on .el{color:var(--accent)}
+.cepg .et{font-size:28px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.big .cepg .et{font-size:32px}

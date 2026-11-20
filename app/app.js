@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.6.1';
+  var VERSION = '1.6.2';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -732,9 +732,10 @@
       var last = store.get(pkey('last'), {}) || {};
       if (arg && arg.li != null) { S.li = arg.li; S.ci = arg.ci; }
       else if (!S.lists[S.li] || !S.lists[S.li].items[S.ci] || !S.liveOpened) {
-        // every time the app opens, live tv starts on beIN Sports HD (not the last channel watched)
-        var pref = openChannel();
-        var pos = pref ? findChannel(pref.id, S.lists[0].name) : findChannel(last.id, last.list); S.li = pos.li; S.ci = pos.ci;
+        // every time the app opens, live tv starts on the first channel of the "BeIN Sport HD" category
+        var pos = openCategory();
+        if (!pos) { var pref = openChannel(); pos = pref ? findChannel(pref.id, S.lists[0].name) : findChannel(last.id, last.list); }
+        S.li = pos.li; S.ci = pos.ci;
       }
       S.liveOpened = true;
       listShow(false);
@@ -762,6 +763,20 @@
   };
   // the channel live tv opens on: settings.startChannel from the phone, else "beIN Sports HD"
   // picks the plain HD feed over 4K / FHD / SD / Gourmet / Max etc. and the lowest number (HD 1 before HD 2)
+  // the category live tv opens on: settings.startCategory from the phone, else the "BeIN Sport HD" category
+  // (plain HD: not the SD / 4K / FHD categories next to it)
+  function openCategory() {
+    var want = stg().startCategory, best = -1, bestScore = -1;
+    function norm(x) { return ' ' + String(x || '').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff+]+/g, ' ') + ' '; }
+    for (var li = 1; li < S.lists.length; li++) {
+      var L = S.lists[li]; if (!L.items.length) continue;
+      var n = norm(L.name), sc = -1;
+      if (want) { if (norm(want) === n) sc = 100; else if (n.indexOf(norm(want).trim()) >= 0) sc = 50; }
+      else if (/ bein /.test(n) && / sports? /.test(n) && / hd /.test(n) && !/ (4k|uhd|fhd|sd) /.test(n)) sc = 100 - n.length / 10;
+      if (sc > bestScore) { bestScore = sc; best = li; }
+    }
+    return best > 0 ? { li: best, ci: 0 } : null;
+  }
   function openChannel() {
     var want = String(stg().startChannel || 'beIN Sports HD').toLowerCase(), words = want.split(/\s+/), best = null, bestScore = -1;
     each(S.streams, function (c) {
@@ -791,7 +806,7 @@
     $('o-no').textContent = ci + 1; $('o-of').textContent = 'من ' + L.items.length;
     $('o-name').textContent = c.name; $('o-list').textContent = L.name; show($('o-q'), false); $('l-listname').textContent = L.name;
     var lg = $('o-logo'); if (c.logo) { lg.style.display = ''; lg.onerror = function () { lg.style.display = 'none'; }; lg.src = c.logo; } else lg.style.display = 'none';
-    $('o-now').textContent = ''; $('o-next').textContent = ''; $('o-nowl').textContent = ''; $('o-nextl').textContent = ''; $('o-prog').style.width = '0';
+    $('o-now').textContent = ''; $('o-next').textContent = ''; show($('o-next2w'), false); $('o-nowl').textContent = ''; $('o-nextl').textContent = ''; $('o-prog').style.width = '0';
     osd(true);
     clearTimeout(playLater);
     playLater = setTimeout(function () { startChannel(c); }, now ? 0 : 380);
@@ -829,21 +844,48 @@
     Status.watching = c.name; Status.soon();
     loadEpg(c);
   }
+  // programme guide: what is on now, next, and after that (for channels whose server sends a guide)
+  var EPG = {};
+  function epgGet(id) {
+    var h = EPG[id];
+    if (h && Date.now() - h.at < 180000 && (!h.l[0] || h.l[0].e > Date.now())) return Promise.resolve(h.l);
+    if (!X.acc || MOCK) return Promise.resolve(MOCK && window.MOCK_EPG ? window.MOCK_EPG(id) : []);
+    return X.call('get_short_epg', '&stream_id=' + id + '&limit=4').then(function (r) {
+      var now = Date.now(), l = [];
+      each((r && r.epg_listings) || [], function (x) {
+        var s = parseInt(x.start_timestamp, 10) * 1000, e = parseInt(x.stop_timestamp, 10) * 1000, t = b64(x.title);
+        if (t && (!e || e > now)) l.push({ s: s, e: e, t: t });
+      });
+      l = l.slice(0, 3); EPG[id] = { at: now, l: l }; return l;
+    }).catch(function () { return []; });
+  }
+  function epgTime(x) { return x.s ? fmtClock(new Date(x.s)) : ''; }
   var loadEpg = debounce(function (c) {
-    if (!X.acc || MOCK) return;
-    X.call('get_short_epg', '&stream_id=' + c.id + '&limit=2').then(function (r) {
+    epgGet(c.id).then(function (l) {
       var cc = S.lists[S.li] && S.lists[S.li].items[S.ci]; if (!cc || cc.id !== c.id) return;
-      var l = (r && r.epg_listings) || [];
-      function tm(x) { var t = parseInt(x.start_timestamp, 10); return t ? fmtClock(new Date(t * 1000)) : ''; }
       if (l[0]) {
-        var s = parseInt(l[0].start_timestamp, 10) * 1000, e = parseInt(l[0].stop_timestamp, 10) * 1000;
+        var s = l[0].s, e = l[0].e;
         $('o-nowl').textContent = 'الآن' + (s ? ' · ' + fmtClock(new Date(s)) + ' – ' + fmtClock(new Date(e)) : '');
-        $('o-now').textContent = b64(l[0].title);
+        $('o-now').textContent = l[0].t;
         if (s && e > s) $('o-prog').style.width = clamp((Date.now() - s) / (e - s) * 100, 0, 100) + '%';
       }
-      if (l[1]) { $('o-nextl').textContent = 'التالي · ' + tm(l[1]); $('o-next').textContent = b64(l[1].title); }
-    }).catch(function () { });
+      if (l[1]) { $('o-nextl').textContent = 'التالي · ' + epgTime(l[1]); $('o-next').textContent = l[1].t; }
+      show($('o-next2w'), !!l[2]);
+      if (l[2]) { $('o-next2l').textContent = 'بعده · ' + epgTime(l[2]); $('o-next2').textContent = l[2].t; }
+    });
   }, 600);
+  // the guide of the highlighted channel, shown next to the channel list
+  var listEpg = debounce(function () {
+    var box = $('cl-epg'), L = S.lists[LS.li], c = L && L.items[LS.sel];
+    if (!c || LS.mode !== 'ch' || $('l-list').className.indexOf('hidden') >= 0) { show(box, false); return; }
+    epgGet(c.id).then(function (l) {
+      var L2 = S.lists[LS.li], c2 = L2 && L2.items[LS.sel]; if (!c2 || c2.id !== c.id) return;
+      if (!l.length) { show(box, false); return; }
+      var lbl = ['الآن', 'التالي', 'بعده'], h = '<div class="en">' + esc(c.name) + '</div>';
+      each(l, function (x, i) { h += '<div class="er' + (i ? '' : ' on') + '"><div class="el">' + lbl[i] + (x.s ? ' · ' + epgTime(x) : '') + '</div><div class="et">' + esc(x.t) + '</div></div>'; });
+      box.innerHTML = h; show(box, true);
+    });
+  }, 450);
   function osd(on, ms) {
     var o = $('l-osd'); o.classList.toggle('off', !on); show($('l-top'), on);
     clearTimeout(osdT);
@@ -890,6 +932,8 @@
     $('ct-rows').innerHTML = ch;
     $('cl-hint').textContent = LS.mode === 'cat' ? '▲ ▼ اختيار القسم · OK دخول القسم' : '◀ الأقسام · OK تشغيل';
     $('l-list').className = 'chwrap' + (LS.mode === 'cat' ? ' incat' : '') + ($('l-list').className.indexOf('hidden') >= 0 ? ' hidden' : '');
+    if (LS.mode !== 'ch') show($('cl-epg'), false);
+    listEpg();
   }
   function favIdMap() { var m = {}; each(favList(), function (f) { if (f) m[+f.id] = 1; }); return m; }
   function listKey(k) {
@@ -1397,12 +1441,12 @@
   }
   // one-time note after the 1.6.1 update, shown once to Ahmed Gamal's profile
   function updateNote() {
-    var id = 'note-161';
+    var id = 'note-162';
     if (store.get('seenNote', '') === id) return;
     setTimeout(function () {
       if (!isAhmed() || cur === 'who' || cur === 'open' || Pop.open) { if (cur !== 'who') setTimeout(updateNote, 4000); return; }
       store.set('seenNote', id);
-      Pop.show({ kicker: 'تحديث جديد', title: 'من مهاب', text: 'خلّينا القنوات تفتح على طول على beIN Sports HD، ولغينا خالص موضوع إن التطبيق يقفل لوحده بعد ساعتين أو ٣ لو محدش داس على الريموت، فاتفرجوا براحتكم.\n\nوابنكم مهاب بيسلّم عليكم وبيقولكم كل حاجة تمام ❤', buttons: [{ label: 'تمام' }] });
+      Pop.show({ kicker: 'تحديث جديد', title: 'من مهاب', text: 'التحديث خلص:\n• القنوات بتفتح على طول على قسم BeIN Sport HD، أول قناة فيه.\n• جدول الماتشات: لما تفتحوا شريط القناة أو قايمة القنوات، هتلاقوا الماتش اللي شغال دلوقتي، واللي بعده، واللي بعده.\n• التطبيق مش بيقفل لوحده خالص، فاتفرجوا براحتكم.\n\nابنكم مهاب بيسلّم عليكم وبيقولكم: بحبكم جدًا ❤', buttons: [{ label: 'تمام' }] });
     }, 2500);
   }
   function maybeShowUrgent() {
@@ -1702,9 +1746,9 @@
 
       '<section class="screen" id="s-live"><div class="spin hidden" id="l-spin"></div><div class="toplist hidden" id="l-top">القائمة: <b id="l-listname"></b></div><div class="numbox hidden" id="l-num"></div>',
       '<div class="osd off" id="l-osd"><div class="no"><b id="o-no"></b><span id="o-of"></span></div><div class="logo"><img id="o-logo" alt=""></div>',
-      '<div class="mid"><div class="nm"><h3 id="o-name"></h3><span class="chip" id="o-list"></span><span class="chip q hidden" id="o-q"></span></div><div class="epg"><div class="now"><div class="lbl" id="o-nowl"></div><div class="ttl" id="o-now"></div><div class="prog"><i id="o-prog"></i></div></div><div class="next"><div class="lbl" id="o-nextl"></div><div class="ttl" id="o-next"></div></div></div></div>',
+      '<div class="mid"><div class="nm"><h3 id="o-name"></h3><span class="chip" id="o-list"></span><span class="chip q hidden" id="o-q"></span></div><div class="epg"><div class="now"><div class="lbl" id="o-nowl"></div><div class="ttl" id="o-now"></div><div class="prog"><i id="o-prog"></i></div></div><div class="next"><div class="lbl" id="o-nextl"></div><div class="ttl" id="o-next"></div></div><div class="next hidden" id="o-next2w"><div class="lbl" id="o-next2l"></div><div class="ttl" id="o-next2"></div></div></div></div>',
       '<div class="side"><div class="t" id="o-clock"></div><div class="k">OK القائمة · ◀ ▶ آخر قناة<br>أخضر: مفضلة · رجوع: الرئيسية</div></div></div>',
-      '<div class="chwrap hidden" id="l-list"><div class="chlist"><div class="lh"><h4 id="cl-name"></h4><span id="cl-count"></span></div><div class="hint" id="cl-hint"></div><div id="cl-rows"></div></div><div class="catlist"><div class="cth">الأقسام</div><div id="ct-rows"></div></div></div></section>',
+      '<div class="chwrap hidden" id="l-list"><div class="chlist"><div class="lh"><h4 id="cl-name"></h4><span id="cl-count"></span></div><div class="hint" id="cl-hint"></div><div id="cl-rows"></div></div><div class="catlist"><div class="cth">الأقسام</div><div id="ct-rows"></div></div><div class="cepg hidden" id="cl-epg"></div></div></section>',
 
       vodHtml('movies', 'm'), vodHtml('series', 's'),
 
