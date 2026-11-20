@@ -394,3 +394,5 @@ img{display:block}
 .cepg .er.on .el{color:var(--accent)}
 .cepg .et{font-size:28px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .big .cepg .et{font-size:32px}
+/* each guide title keeps its own direction, so English match names are not shown flipped */
+.epg .ttl,.cepg .et,#o-name,.chlist .nmx{unicode-bidi:-webkit-plaintext;unicode-bidi:plaintext;text-align:right}

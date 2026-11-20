@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.6.2';
+  var VERSION = '1.6.3';
   var CFG = window.AHMED_TV || {};
   var IS_TV = !!(window.webapis && window.webapis.avplay);
   var DB = String(CFG.db || '').replace(/\/+$/, '');
@@ -26,7 +26,12 @@
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
   function debounce(fn, ms) { var t; return function () { var a = arguments, self = this; clearTimeout(t); t = setTimeout(function () { fn.apply(self, a); }, ms); }; }
   function hexA(hex, a) { var n = parseInt(String(hex).slice(1), 16); return 'rgba(' + (n >> 16) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
-  function b64(s) { if (!s) return ''; try { return decodeURIComponent(escape(atob(s))); } catch (e) { return s; } }
+  // guide titles usually come base64-encoded, but some servers send plain text: only decode real base64
+  function b64(s) {
+    if (!s) return ''; s = String(s);
+    if (s.length % 4 || !/^[A-Za-z0-9+\/]+={0,2}$/.test(s)) return s;
+    try { var d = decodeURIComponent(escape(atob(s))); return /[\x00-\x08\x0e-\x1f\ufffd]/.test(d) ? s : d; } catch (e) { return s; }
+  }
   function fmtClock(d) { var h = d.getHours(); return ((h % 12) || 12) + ':' + pad(d.getMinutes()) + (h < 12 ? ' ص' : ' م'); }
   function fmtDur(sec) { sec = Math.max(0, Math.floor(sec)); var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return (h ? h + ':' + pad(m) : m) + ':' + pad(s); }
   function minsLeft(sec) { var m = Math.round(sec / 60); return m >= 60 ? 'فاضل ' + Math.floor(m / 60) + ' ساعة ' + (m % 60) + ' د' : 'فاضل ' + m + ' دقيقة'; }
@@ -887,6 +892,7 @@
     });
   }, 450);
   function osd(on, ms) {
+    if (on && cur === 'live' && Date.now() - (osd._epgAt || 0) > 60000) { osd._epgAt = Date.now(); var oc = S.lists[S.li] && S.lists[S.li].items[S.ci]; if (oc) loadEpg(oc); }
     var o = $('l-osd'); o.classList.toggle('off', !on); show($('l-top'), on);
     clearTimeout(osdT);
     if (on) { $('o-clock').textContent = fmtClock(new Date()); osdT = setTimeout(function () { o.classList.add('off'); show($('l-top'), false); }, ms || 5000); }
